@@ -41,8 +41,11 @@ export default function App() {
   const handleLogin = async () => {
     try {
       localStorage.removeItem("isGuestSession");
-      await googleSignIn();
-      setNeedsAuth(false);
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setNeedsAuth(false);
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to sign in. Please try again.");

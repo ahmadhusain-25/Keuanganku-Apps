@@ -1601,66 +1601,6 @@ function sendWhatsAppReply(to, message) {
               </div>
             </div>
 
-            {/* Google Apps Script Integration Helper */}
-            <div className={`${ui.panelBg} backdrop-blur-xl border ${ui.panelRadius} p-6 shadow-xl space-y-4 transition-all duration-500 overflow-hidden`}>
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-                  <FileText className="w-5 h-5 animate-pulse" />
-                </span>
-                <div>
-                  <h3 className={`text-sm font-bold ${ui.textMain} leading-tight`}>
-                    Ekspor Google Apps Script
-                  </h3>
-                  <p className="text-[10px] text-blue-500 font-semibold">
-                    Koneksi Live Google Sheet Aktif
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
-                  Deployment otomatis asisten bot WA "Keuanganku" langsung terintegrasi dengan Google Sheet Anda secara realtime.
-                </p>
-
-                <div className={`p-3 rounded-2xl ${isLight ? 'bg-blue-50/50 border-blue-100' : 'bg-blue-500/5 border-blue-500/10'} border flex flex-col gap-2`}>
-                  <p className="text-[11px] font-bold text-blue-500 flex items-center gap-1">
-                    🔗 Proyek Google Apps Script Anda:
-                  </p>
-                  <a 
-                    href="https://script.google.com/u/0/home/projects/1JZpDGAb8YhULQ70TI1fC___FtNfeKbqHUTCSlHC6XHTobCmfl9kN7Co8/edit" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline break-all font-mono font-medium flex items-center gap-1 bg-white/50 dark:bg-black/30 p-2 rounded-xl"
-                  >
-                    Open Apps Script Editor <ExternalLink className="w-3 h-3 inline" />
-                  </a>
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <p className={`text-[11px] font-semibold ${ui.textMain}`}>Langkah Pemasangan:</p>
-                  <ul className="text-[10px] space-y-1 text-slate-500 list-decimal pl-4">
-                    <li>Buka Editor skrip via link di atas.</li>
-                    <li>Salin kode otomatis di bawah (ID Spreadsheet aktif Anda sudah terpasang otomatis!).</li>
-                    <li>Paste ke editor Google Apps Script dan klik **Save**.</li>
-                    <li>Klik **Deploy** &gt; **New deployment** &gt; pilih tipe **Web App** untuk mengaktifkan webhook realtime.</li>
-                  </ul>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleCopyAppsScript}
-                  className={`w-full py-2.5 ${ui.buttonRadius} text-xs font-semibold ${
-                    copiedScript 
-                      ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' 
-                      : 'bg-blue-500/10 border border-blue-500/20 text-blue-500 hover:bg-blue-500/20'
-                  } active:scale-[0.98] transition-all flex items-center justify-center gap-2`}
-                >
-                  {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  {copiedScript ? "Kode Berhasil Disalin!" : "Salin Kode Google Apps Script"}
-                </button>
-              </div>
-            </div>
-
           </div>
         </section>
         </>
