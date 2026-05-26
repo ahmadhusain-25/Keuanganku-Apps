@@ -37,7 +37,10 @@ import {
   MessageSquare, 
   Check, 
   X,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Copy,
+  FileText,
+  ExternalLink
 } from "lucide-react";
 
 const BrandLogo = ({ className = "w-12 h-12" }: { className?: string }) => {
@@ -126,11 +129,237 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [reminderDate, setReminderDate] = useState("");
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
-  const [waNotify, setWaNotify] = useState(false);
+  const [waNotify, setWaNotify] = useState(true); // default to true for bot simulation
+
+  // WhatsApp Bot State
+  const [waBotEnabled, setWaBotEnabled] = useState(true);
+  const [waBotNotifyOnAdd, setWaBotNotifyOnAdd] = useState(true);
+  const [waBotNotifyOnBudget, setWaBotNotifyOnBudget] = useState(true);
+  const [chatInput, setChatInput] = useState("");
+  const [botIsTyping, setBotIsTyping] = useState(false);
+  const [chatMessages, setChatMessages] = useState<any[]>([
+    {
+      id: "welcome",
+      sender: "bot",
+      text: "Halo! Saya *Keuanganku* WA Bot 🤖\n\nSaya asisten robot otomatis yang siap memantau keuangan Anda. Saya akan mengirim laporan transaksi secara instan!\n\nKetik *!bantuan* untuk mendaftar perintah saya.",
+      timestamp: "09:00"
+    }
+  ]);
 
   // AI & Theming
   const [aiSummary, setAiSummary] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+
+  const handleCopyAppsScript = () => {
+    const code = `/**
+ * ====================================================================
+ *                 BOT WA "KEUANGANKU" GOOGLE APPS SCRIPT
+ * ====================================================================
+ * 
+ * Skrip ini didesain untuk ditempelkan pada Google Apps Script Anda:
+ * URL Project: https://script.google.com/u/0/home/projects/1JZpDGAb8YhULQ70TI1fC___FtNfeKbqHUTCSlHC6XHTobCmfl9kN7Co8/edit
+ */
+
+// Ganti ID Spreadsheet Anda jika ingin mengunci ke Spreadsheet tertentu.
+const SPREADSHEET_ID = "${spreadsheetId || ''}"; 
+
+// Masukkan Kunci API Gemini Anda untuk mengaktifkan kecerdasan buatan langsung di WhatsApp Bot Anda.
+const GEMINI_API_KEY = "MASUKKAN_GEMINI_API_KEY_ANDA_DISINI";
+
+function doPost(e) {
+  try {
+    const postData = JSON.parse(e.postData.contents);
+    const incomingMessage = postData.message || postData.text || "";
+    const senderNumber = postData.sender || postData.phone || "";
+    
+    if (!incomingMessage || !senderNumber) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Data kiriman tidak lengkap" }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const replyText = handleCommand(incomingMessage, senderNumber);
+    sendWhatsAppReply(senderNumber, replyText);
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: true, reply: replyText }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: error.toString() }))
+                         .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function handleCommand(messageText, senderNumber) {
+  const cleanMsg = messageText.trim();
+  const lowerMsg = cleanMsg.toLowerCase();
+  
+  if (lowerMsg === "!bantuan" || lowerMsg === "bantuan" || lowerMsg === "help") {
+    return "🤖 *Asisten WA Keuanganku* - Daftar Perintah:\\n\\n" +
+           "• *!saldo* - Cek ringkasan sisa saldo, pemasukan, & pengeluaran Anda saat ini.\\n" +
+           "• *!summary* - Analisis keuangan instan dari otak AI Gemini.\\n" +
+           "• *!tambah [income/expense] [nilai] [kategori] [deskripsi]* - Tambah transaksi lewat chat.\\n" +
+           "  _Contoh: !tambah expense 15000 Makanan Makan Siang Bakso_\\n\\n" +
+           "Silakan kirim pesan perintah di atas!";
+  }
+  
+  if (lowerMsg === "!saldo" || lowerMsg === "saldo") {
+    return getBalanceSummary();
+  }
+  
+  if (lowerMsg === "!summary" || lowerMsg === "summary") {
+    return getAISummaryFromGemini();
+  }
+  
+  if (lowerMsg.startsWith("!tambah")) {
+    const parts = cleanMsg.split(/\\s+/);
+    if (parts.length < 5) {
+      return "❌ *Pencatatan Gagal*\\n\\n_Format salah! Gunakan format ini:_\\n*!tambah [income/expense] [nominal] [kategori] [deskripsi]*\\n\\n_Contoh:_ *!tambah expense 12000 Jajan Es Coklat Sore*";
+    }
+    
+    const rawType = parts[1].toLowerCase();
+    const txType = (rawType === "income" || rawType === "pemasukan") ? "Income" : "Expense";
+    const txAmount = Number(parts[2]);
+    const txCategory = parts[3];
+    const txDesc = parts.slice(4).join(" ");
+    
+    if (isNaN(txAmount) || txAmount <= 0) {
+      return "❌ *Gagal*: Nominal transaksi harus berupa angka positif yang valid!";
+    }
+    
+    return addTransactionToSheet(txType, txAmount, txCategory, txDesc);
+  }
+  
+  return "Halo! Perintah '" + cleanMsg + "' tidak dikenali oleh Bot Keuanganku.\\n\\nKetik *!bantuan* untuk mendaftar fungsi otomatis asisten finansial saya. 🤖";
+}
+
+function getBalanceSummary() {
+  try {
+    const sheet = getTransactionsSheet();
+    const rows = sheet.getDataRange().getValues();
+    
+    let totalIncome = 0;
+    let totalExpense = 0;
+    
+    for (let i = 1; i < rows.length; i++) {
+      const type = rows[i][2];
+      const amount = Number(rows[i][4]);
+      
+      if (type === "Income") {
+        totalIncome += amount;
+      } else if (type === "Expense") {
+        totalExpense += amount;
+      }
+    }
+    
+    const balance = totalIncome - totalExpense;
+    
+    return "🔵 *Rangkuman Saldo Anda* (Live GSheet) 🤖\\n\\n" +
+           "• *Total Saldo*: Rp " + formatRupiah(balance) + "\\n" +
+           "• *Pemasukan 🟢*: Rp " + formatRupiah(totalIncome) + "\\n" +
+           "• *Pengeluaran 🔴*: Rp " + formatRupiah(totalExpense) + "\\n\\n" +
+           "_Data diperbarui instan di Spreadsheet Anda._";
+  } catch (err) {
+    return "❌ Gagal memuat saldo: " + err.toString();
+  }
+}
+
+function addTransactionToSheet(type, amount, category, description) {
+  try {
+    const sheet = getTransactionsSheet();
+    const id = Date.now().toString();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
+    
+    sheet.appendRow([id, dateStr, type, category, amount, description]);
+    
+    return "✅ *Catat Keuangan Sukses* 🤖\\n\\n" +
+           "Berhasil mencatat *" + (type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴") + "* baru:\\n" +
+           "• *Nilai*: Rp " + formatRupiah(amount) + "\\n" +
+           "• *Kategori*: " + category + "\\n" +
+           "• *Deskripsi*: " + description + "\\n\\n" +
+           "_Data berhasil tersinkronisasi dengan Spreadsheet Keuanganku!_";
+  } catch (err) {
+    return "❌ Gagal mencatat transaksi: " + err.toString();
+  }
+}
+
+function getAISummaryFromGemini() {
+  if (GEMINI_API_KEY === "MASUKKAN_GEMINI_API_KEY_ANDA_DISINI" || !GEMINI_API_KEY) {
+    return "🌐 *Teguran Fitur AI Bot* 🤖\\n\\nFitur ini memerlukan Google Gemini API Key. Mohon buka file skrip Apps Script Anda dan masukkan Kunci API berharga Anda di variabel 'GEMINI_API_KEY'.";
+  }
+  
+  try {
+    const sheet = getTransactionsSheet();
+    const rows = sheet.getDataRange().getValues();
+    const transactions = [];
+    
+    for (let i = 1; i < Math.min(rows.length, 30); i++) {
+      transactions.push({
+        date: rows[i][1],
+        type: rows[i][2],
+        category: rows[i][3],
+        amount: rows[i][4],
+        description: rows[i][5]
+      });
+    }
+    
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY;
+    const prompt = "Analisis data transaksi keuangan berikut dan berikan ringkasan pendek serta tips/insight finansial cerdas maksimal dalam 2 paragraf padat. Gunakan bahasa Indonesia. Data: " + JSON.stringify(transactions);
+    
+    const payload = {
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
+    };
+    
+    const options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+    
+    if (json.candidates && json.candidates[0].content.parts[0].text) {
+      return "🤖 *Rekomendasi AI Gemini Keuanganku*:\\n\\n" + json.candidates[0].content.parts[0].text;
+    } else {
+      return "🤖 Gagal memproses analisis AI dari respon Gemini.";
+    }
+  } catch (er) {
+    return "🤖 Bermasalah saat memanggil otak bionik Gemini AI: " + er.toString();
+  }
+}
+
+function getTransactionsSheet() {
+  let ss;
+  if (SPREADSHEET_ID) {
+    ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } else {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  
+  let sheet = ss.getSheetByName("Transactions");
+  if (!sheet) {
+    sheet = ss.insertSheet("Transactions");
+    sheet.appendRow(["ID", "Date", "Type", "Category", "Amount", "Description"]);
+  }
+  return sheet;
+}
+
+function formatRupiah(val) {
+  return val.toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ".");
+}
+
+function sendWhatsAppReply(to, message) {
+  Logger.log("Mengirim balasan ke: " + to + " | Pesan: " + message);
+}
+`;
+    navigator.clipboard.writeText(code);
+    setCopiedScript(true);
+    showToast("Kode Google Apps Script berhasil disalin!", "success");
+    setTimeout(() => setCopiedScript(false), 3000);
+  };
   const [themeMode, setThemeMode] = useState<"blue" | "purple" | "emerald" | "rose" | "pink">("blue");
   const [colorMode, setColorMode] = useState<"dark" | "light">("dark");
   const [designStyle, setDesignStyle] = useState<"modern" | "cute">("modern");
@@ -319,15 +548,140 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     }
   }, []);
 
+  const handleSendChatMessage = async (msgText: string) => {
+    if (!msgText.trim()) return;
+
+    const userMsgText = msgText;
+    const timeNow = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    
+    // Add User Message to Chat Simulator
+    const userMsgObj = {
+      id: Date.now().toString(),
+      sender: "user" as const,
+      text: userMsgText,
+      timestamp: timeNow
+    };
+
+    setChatMessages(prev => [...prev, userMsgObj]);
+    setChatInput("");
+    setBotIsTyping(true);
+
+    // Simulate WA Bot Thinking
+    setTimeout(async () => {
+      let responseText = "";
+      const lowerInput = userMsgText.trim().toLowerCase();
+
+      if (lowerInput === "!bantuan" || lowerInput === "bantuan" || lowerInput === "help" || lowerInput === "/help") {
+        responseText = `🤖 *Asisten WA Keuanganku* - Daftar Perintah:\n\n` +
+          `• *!saldo* - Cek ringkasan saldo, pemasukan, & pengeluaran aktual.\n` +
+          `• *!summary* - Rekomendasi/analisis finansial dari kembaran otak AI Anda.\n` +
+          `• *!tambah [income/expense] [jumlah] [kategori] [deskripsi]* - Tambah transaksi instan via chat.\n` +
+          `  _Contoh: !tambah expense 15000 Makan Es Jeruk_\n` +
+          `• *!reset* - Reset seluruh transaksi.`;
+      } else if (lowerInput === "!saldo" || lowerInput === "saldo") {
+        responseText = `🔵 *Rangkuman Saldo Anda* 🤖\n\n` +
+          `• *Total Saldo*: Rp ${(totalIncome - totalExpense).toLocaleString("id-ID")}\n` +
+          `• *Pemasukan 🟢*: Rp ${totalIncome.toLocaleString("id-ID")}\n` +
+          `• *Pengeluaran 🔴*: Rp ${totalExpense.toLocaleString("id-ID")}\n` +
+          `• *Limit Anggaran*: Rp ${monthlyBudget.toLocaleString("id-ID")}\n` +
+          `• *Sisa Batas Anggaran*: Rp ${(monthlyBudget - totalExpense).toLocaleString("id-ID")}\n\n` +
+          `_Cerdas mengelola uang bersama Keuanganku!_`;
+      } else if (lowerInput === "!summary" || lowerInput === "summary") {
+        responseText = `🤖 *Rekomendasi Asisten AI Keuanganku*:\n\n` +
+          `${aiSummary || "Analisis AI Anda belum di-generate atau kosong. Silakan masuk ke panel 'Asisten AI' lalu klik 'Analisis Sekarang' untuk men-sinkronisasi otak AI!"}`;
+      } else if (lowerInput.startsWith("!tambah")) {
+        // Parse "!tambah expense 15000 Kategori Deskripsi dst"
+        const parts = userMsgText.split(/\s+/);
+        if (parts.length < 5) {
+          responseText = `❌ *Gagal menambah transaksi*.\n\n_Format salah! Harap gunakan format:_\n*!tambah [income/expense] [jumlah] [kategori] [deskripsi]*\n\n_Contoh:_ *!tambah expense 25000 Makanan Makan Siang Bakso*`;
+        } else {
+          const rawType = parts[1].toLowerCase();
+          const txType: "Income" | "Expense" = rawType === "income" || rawType === "pemasukan" ? "Income" : "Expense";
+          const txAmount = Number(parts[2]);
+          const txCategory = parts[3];
+          const txDesc = parts.slice(4).join(" ");
+
+          if (isNaN(txAmount) || txAmount <= 0) {
+            responseText = `❌ *Gagal mencatat*: Jumlah transaksi harus berupa angka positif yang valid!`;
+          } else {
+            try {
+              if (user?.isGuest) {
+                const newTx = {
+                  id: Date.now().toString(),
+                  amount: txAmount,
+                  type: txType,
+                  category: txCategory,
+                  description: txDesc,
+                  date: new Date().toISOString().split('T')[0]
+                };
+                const stored = localStorage.getItem("guest_transactions");
+                const txs = stored ? JSON.parse(stored) : [];
+                const updated = [newTx, ...txs];
+                localStorage.setItem("guest_transactions", JSON.stringify(updated));
+                setTransactions(updated);
+              } else {
+                await addTransaction({
+                  spreadsheetId: spreadsheetId || "",
+                  amount: txAmount,
+                  type: txType,
+                  category: txCategory,
+                  description: txDesc,
+                  date: new Date().toISOString().split('T')[0]
+                });
+                await loadData();
+              }
+              responseText = `✅ *Pencatatan Otomatis Sukses* 🤖\n\n` +
+                `Berhasil mencatat *${txType === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}* baru:\n` +
+                `• *Jumlah*: Rp ${txAmount.toLocaleString("id-ID")}\n` +
+                `• *Kategori*: ${txCategory}\n` +
+                `• *Keterangan*: ${txDesc}\n\n` +
+                `_Data Anda telah langsung tersinkronisasi dengan Database spreadsheet!_`;
+            } catch (err: any) {
+              responseText = `❌ *Pencatatan Gagal*: ${err.message}`;
+            }
+          }
+        }
+      } else if (lowerInput === "!reset" || lowerInput === "reset") {
+        try {
+          if (user?.isGuest) {
+            localStorage.removeItem("guest_transactions");
+            setTransactions([]);
+          } else {
+            await resetTransactions(spreadsheetId || "");
+            await loadData();
+          }
+          responseText = `🗑️ *Reset Keuangan Sukses* 🤖\n\nSeluruh riwayat transaksi Anda telah berhasil dikosongkan secara berkala sesuai instruksi chat Anda.`;
+        } catch (e: any) {
+          responseText = `❌ *Gagal me-reset*: ${e.message}`;
+        }
+      } else {
+        responseText = `Halo! Perintah *"${userMsgText}"* tidak dikenali.\n\nSilakan ketik *!bantuan* untuk mendaftar fungsi otomatis asisten Bot Keuanganku. 🤖`;
+      }
+
+      setChatMessages(prev => [...prev, {
+        id: Date.now().toString() + "_reply",
+        sender: "bot",
+        text: responseText,
+        timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
+      }]);
+      setBotIsTyping(false);
+    }, 1000);
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!spreadsheetId) return;
     try {
       setIsAdding(true);
+      const inputAmount = Number(amount);
+      const isExpense = type === "Expense";
+      
+      let updatedList: Transaction[] = [];
+
       if (user?.isGuest) {
         const newTx: Transaction = {
           id: Date.now().toString(),
-          amount: Number(amount),
+          amount: inputAmount,
           type,
           category,
           description: desc,
@@ -335,42 +689,69 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         };
         const stored = localStorage.getItem("guest_transactions");
         const txs = stored ? JSON.parse(stored) : [];
-        const updated = [newTx, ...txs];
-        localStorage.setItem("guest_transactions", JSON.stringify(updated));
-        setTransactions(updated);
-
-        // Auto WA Notification
-        if (waNotify && phone) {
-           const now = new Date();
-           const timeString = format(now, "HH:mm");
-           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
-           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${Number(amount).toLocaleString("id-ID")}\nKeterangan: ${desc}`;
-           const res = await sendWANotification(phone, msg);
-           if (res.waLink) {
-             window.open(res.waLink, "_blank");
-           }
-        }
+        updatedList = [newTx, ...txs];
+        localStorage.setItem("guest_transactions", JSON.stringify(updatedList));
+        setTransactions(updatedList);
       } else {
         await addTransaction({
           spreadsheetId,
-          amount: Number(amount),
+          amount: inputAmount,
           type,
           category,
           description: desc,
           date
         });
-        // Auto WA Notification
-        if (waNotify && phone) {
-           const now = new Date();
-           const timeString = format(now, "HH:mm");
-           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
-           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${Number(amount).toLocaleString("id-ID")}\nKeterangan: ${desc}`;
-           const res = await sendWANotification(phone, msg);
-           if (res.waLink) {
-             window.open(res.waLink, "_blank");
-           }
+        const liveData = await fetchFinances(spreadsheetId);
+        updatedList = liveData.transactions;
+        setTransactions(updatedList);
+      }
+
+      // 🦾 Send Real-time Bot Notification inside Simulator
+      if (waBotEnabled && waBotNotifyOnAdd) {
+        const timeStr = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+        const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
+        const textMsg = `🔔 *NOTIFIKASI TRANSAKSI BARU* 🤖\n\n` +
+          `• *Keterangan*: ${desc || "Tanpa Keterangan"}\n` +
+          `• *Tanggal*: ${dateFormatted}\n` +
+          `• *Jenis*: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\n` +
+          `• *Kategori*: ${category}\n` +
+          `• *Nominal*: Rp ${inputAmount.toLocaleString("id-ID")}`;
+        
+        setChatMessages(prev => [...prev, {
+          id: Date.now().toString() + "_addNotify",
+          sender: "bot",
+          text: textMsg,
+          timestamp: timeStr
+        }]);
+
+        // Budget Breached Check
+        if (waBotNotifyOnBudget && monthlyBudget > 0 && isExpense) {
+          const currentExpenses = updatedList.filter(t => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0);
+          if (currentExpenses > monthlyBudget) {
+            const textBudget = `⚠️ *PERINGATAN ANGGARAN BULANAN* 🤖\n\n` +
+              `Total Pengeluaran Anda saat ini (*Rp ${currentExpenses.toLocaleString("id-ID")}*) telah MELEBIHI batas anggaran bulanan sebesar *Rp ${monthlyBudget.toLocaleString("id-ID")}*!\n\n_Harap hemat anggaran belanja Anda demi kestabilan tabungan._`;
+            setChatMessages(prev => [...prev, {
+              id: Date.now().toString() + "_budgetNotify",
+              sender: "bot",
+              text: textBudget,
+              timestamp: timeStr
+            }]);
+          }
         }
       }
+
+      // Also support standard sendWANotification mock logic if setting active
+      if (waNotify && phone) {
+         try {
+           const timeString = format(new Date(), "HH:mm");
+           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
+           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${inputAmount.toLocaleString("id-ID")}\nKeterangan: ${desc}`;
+           await sendWANotification(phone, msg);
+         } catch (waErr) {
+           console.error("Simulation notify hook: ", waErr);
+         }
+      }
+
       showToast("Transaksi berhasil ditambahkan!", "success");
       await loadData();
       setAmount("");
@@ -1042,29 +1423,242 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               </form>
             </div>
 
-            <div className={`${ui.panelBg} backdrop-blur-xl border rounded-3xl p-6 transition-colors`}>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className={`text-[10px] font-bold flex items-center gap-2 uppercase tracking-widest ${ui.textMuted}`}>
-                  <Send className={`w-4 h-4 ${isLight ? 'text-green-600' : 'text-green-400'}`} /> WhatsApp Notify
-                </h3>
-                <div className={`px-2 py-0.5 ${isLight ? 'bg-green-100 text-green-700 border-green-200' : 'bg-green-500/20 text-green-400 border-green-500/20'} text-[10px] rounded-full border`}>Aktif</div>
+            <div className={`${ui.panelBg} backdrop-blur-xl border rounded-[2rem] p-6 shadow-xl transition-all duration-500 overflow-hidden`}>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4.5 pb-3 border-b border-slate-200/50 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className={`p-2 rounded-xl bg-green-500/10 text-green-500`}>
+                    <MessageSquare className="w-5 h-5 animate-pulse" />
+                  </span>
+                  <div>
+                    <h3 className={`text-sm font-bold ${ui.textMain} leading-tight`}>
+                      Bot WA "Keuanganku"
+                    </h3>
+                    <p className="text-[10px] text-green-500 font-semibold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block"></span>
+                      Online & Automated
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-[10px] px-2.5 py-0.5 font-bold rounded-full ${waBotEnabled ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'}`}>
+                    {waBotEnabled ? "AKTIF" : "OFF"}
+                  </span>
+                </div>
               </div>
-              <p className={`text-xs ${ui.textMuted} mb-4 leading-relaxed`}>
-                Kirim ringkasan saldo kamu bulan ini.
-              </p>
-              <form onSubmit={handleSendWA} className="space-y-3">
-                <input 
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="081234..."
-                  className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none`}
-                  required
-                />
-                <button type="submit" className={`w-full ${isLight ? 'bg-green-100 border-green-200 hover:bg-green-200 text-green-700' : 'bg-green-500/20 border-green-500/20 hover:bg-green-500/40 text-green-400'} font-medium py-2 ${ui.buttonRadius} text-sm transition-colors shadow`}>
-                  Kirim Ringkasan
+
+              {/* Bot Automation Toggles */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className={`block text-xs font-semibold ${ui.textMuted} mb-1.5`}>Nomor WhatsApp Terhubung</label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="Contoh: 08123456789"
+                    className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs focus:ring-2 focus:ring-green-500 outline-none transition-shadow`}
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Robot akan mengirim notifikasi ke nomor ini jika dipicu otomatis.</p>
+                </div>
+
+                <div className="space-y-2.5 pt-2 border-t border-slate-200/50 dark:border-slate-800">
+                  <p className={`text-[11px] font-bold ${ui.textMain} tracking-wide uppercase`}>Aturan Otomatisasi (Automation Rules)</p>
+                  
+                  <label className="flex items-center justify-between p-2.5 rounded-xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer">
+                    <div className="flex flex-col pr-2">
+                      <span className="text-xs font-semibold text-slate-200">Aktifkan Engine Bot</span>
+                      <span className="text-[10px] text-slate-500">Nyalakan respon otomatis & simulator</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={waBotEnabled}
+                      onChange={e => setWaBotEnabled(e.target.checked)}
+                      className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4 w-4"
+                    />
+                  </label>
+
+                  <label className={`flex items-center justify-between p-2.5 rounded-xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
+                    <div className="flex flex-col pr-2">
+                      <span className="text-xs font-semibold text-slate-200">Notifikasi Transaksi Baru</span>
+                      <span className="text-[10px] text-slate-500">Infokan instan chat WA tiap input transaksi</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={waBotNotifyOnAdd}
+                      onChange={e => setWaBotNotifyOnAdd(e.target.checked)}
+                      disabled={!waBotEnabled}
+                      className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4 w-4"
+                    />
+                  </label>
+
+                  <label className={`flex items-center justify-between p-2.5 rounded-xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
+                    <div className="flex flex-col pr-2">
+                      <span className="text-xs font-semibold text-slate-200">Pengawas Budget Limit</span>
+                      <span className="text-[10px] text-slate-500">Peringatan otomatis saat pengeluaran meluap</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={waBotNotifyOnBudget}
+                      onChange={e => setWaBotNotifyOnBudget(e.target.checked)}
+                      disabled={!waBotEnabled}
+                      className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4 w-4"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Bot WhatsApp Interactive Simulator Mobile view */}
+              <div className="border border-slate-200/60 dark:border-slate-800 rounded-3xl overflow-hidden bg-slate-900 shadow-lg">
+                <div className="bg-[#075e54] text-white p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[#075e54] font-bold text-sm">
+                      🤖
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold leading-normal">Keuanganku Bot</h4>
+                      <p className="text-[9px] text-emerald-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping"></span> online
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[9px] bg-white/10 px-2 py-0.5 rounded-full font-mono text-emerald-100">SIMULATOR WA</span>
+                </div>
+
+                {/* Chat Message Lists Area */}
+                <div 
+                  className="p-3 h-[250px] overflow-y-auto bg-slate-950 flex flex-col space-y-2.5 scrollbar-thin"
+                  style={{
+                    backgroundImage: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')",
+                    backgroundSize: "cover",
+                  }}
+                >
+                  {chatMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`max-w-[85%] rounded-2xl p-2 px-3 text-xs shadow-sm leading-relaxed ${
+                        msg.sender === "bot"
+                          ? "bg-white text-slate-900 self-start rounded-tl-none border border-slate-200"
+                          : "bg-[#dcf8c6] text-slate-900 self-end rounded-tr-none border border-green-200"
+                      }`}
+                    >
+                      {/* Robust split parsing for bold styles */}
+                      <div className="whitespace-pre-wrap text-[11px]">
+                        {msg.text.split("\n").map((line: string, lineIndex: number) => {
+                          const textParts = line.split(/(\*[^*]+\*)/g);
+                          return (
+                            <p key={lineIndex} className="mb-0.5">
+                              {textParts.map((part: string, idx: number) => {
+                                if (part.startsWith("*") && part.endsWith("*")) {
+                                  return <strong key={idx} className="font-bold text-green-800 dark:text-green-800">{part.slice(1, -1)}</strong>;
+                                }
+                                return part;
+                              })}
+                            </p>
+                          );
+                        })}
+                      </div>
+                      <span className="text-[8px] opacity-65 font-mono block text-right mt-1">{msg.timestamp}</span>
+                    </div>
+                  ))}
+
+                  {botIsTyping && (
+                    <div className="bg-white text-slate-950 self-start rounded-2xl rounded-tl-none p-2 px-3 text-xs shadow-sm flex items-center gap-1.5 border border-slate-200">
+                      <span className="text-[10px] text-slate-500 animate-pulse font-medium">Keuanganku Bot sedang mengetik</span>
+                      <span className="flex gap-0.5">
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                        <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce delay-220"></span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Keyboard Input Bar */}
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (chatInput.trim()) {
+                      handleSendChatMessage(chatInput);
+                    }
+                  }} 
+                  className="p-2 border-t border-slate-800 bg-slate-900 flex gap-1.5 focus-within:ring-1 focus-within:ring-green-500"
+                >
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ketik command, misal: !saldo atau !bantuan"
+                    className="flex-1 bg-slate-950 text-white rounded-full px-3.5 py-1.5 text-xs outline-none border border-slate-800 text-[11px] placeholder:text-slate-500"
+                  />
+                  <button
+                    type="submit"
+                    className="w-8 h-8 rounded-full bg-[#128c7e] text-white flex items-center justify-center active:scale-95 transition-transform"
+                    title="Kirim pesan command"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Google Apps Script Integration Helper */}
+            <div className={`${ui.panelBg} backdrop-blur-xl border ${ui.panelRadius} p-6 shadow-xl space-y-4 transition-all duration-500 overflow-hidden`}>
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                  <FileText className="w-5 h-5 animate-pulse" />
+                </span>
+                <div>
+                  <h3 className={`text-sm font-bold ${ui.textMain} leading-tight`}>
+                    Ekspor Google Apps Script
+                  </h3>
+                  <p className="text-[10px] text-blue-500 font-semibold">
+                    Koneksi Live Google Sheet Aktif
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
+                  Deployment otomatis asisten bot WA "Keuanganku" langsung terintegrasi dengan Google Sheet Anda secara realtime.
+                </p>
+
+                <div className={`p-3 rounded-2xl ${isLight ? 'bg-blue-50/50 border-blue-100' : 'bg-blue-500/5 border-blue-500/10'} border flex flex-col gap-2`}>
+                  <p className="text-[11px] font-bold text-blue-500 flex items-center gap-1">
+                    🔗 Proyek Google Apps Script Anda:
+                  </p>
+                  <a 
+                    href="https://script.google.com/u/0/home/projects/1JZpDGAb8YhULQ70TI1fC___FtNfeKbqHUTCSlHC6XHTobCmfl9kN7Co8/edit" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline break-all font-mono font-medium flex items-center gap-1 bg-white/50 dark:bg-black/30 p-2 rounded-xl"
+                  >
+                    Open Apps Script Editor <ExternalLink className="w-3 h-3 inline" />
+                  </a>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <p className={`text-[11px] font-semibold ${ui.textMain}`}>Langkah Pemasangan:</p>
+                  <ul className="text-[10px] space-y-1 text-slate-500 list-decimal pl-4">
+                    <li>Buka Editor skrip via link di atas.</li>
+                    <li>Salin kode otomatis di bawah (ID Spreadsheet aktif Anda sudah terpasang otomatis!).</li>
+                    <li>Paste ke editor Google Apps Script dan klik **Save**.</li>
+                    <li>Klik **Deploy** &gt; **New deployment** &gt; pilih tipe **Web App** untuk mengaktifkan webhook realtime.</li>
+                  </ul>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopyAppsScript}
+                  className={`w-full py-2.5 ${ui.buttonRadius} text-xs font-semibold ${
+                    copiedScript 
+                      ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' 
+                      : 'bg-blue-500/10 border border-blue-500/20 text-blue-500 hover:bg-blue-500/20'
+                  } active:scale-[0.98] transition-all flex items-center justify-center gap-2`}
+                >
+                  {copiedScript ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copiedScript ? "Kode Berhasil Disalin!" : "Salin Kode Google Apps Script"}
                 </button>
-              </form>
+              </div>
             </div>
 
           </div>
