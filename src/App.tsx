@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { initAuth, googleSignIn, logout, getAccessToken } from "./auth";
+import { initAuth, googleSignIn, logout } from "./auth";
 import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
 
@@ -9,6 +9,20 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const isGuest = localStorage.getItem("isGuestSession") === "true";
+    if (isGuest) {
+      setUser({
+        uid: "guest-user",
+        displayName: "Tamu Keuanganku",
+        email: "tamu@keuanganku.local",
+        photoURL: "",
+        isGuest: true
+      });
+      setNeedsAuth(false);
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = initAuth(
       (u) => {
         setUser(u);
@@ -26,6 +40,7 @@ export default function App() {
 
   const handleLogin = async () => {
     try {
+      localStorage.removeItem("isGuestSession");
       await googleSignIn();
       setNeedsAuth(false);
     } catch (e) {
@@ -34,24 +49,42 @@ export default function App() {
     }
   };
 
+  const handleGuestLogin = () => {
+    localStorage.setItem("isGuestSession", "true");
+    setUser({
+      uid: "guest-user",
+      displayName: "Tamu Keuanganku",
+      email: "tamu@keuanganku.local",
+      photoURL: "",
+      isGuest: true
+    });
+    setNeedsAuth(false);
+  };
+
   const handleLogout = async () => {
-    await logout();
+    localStorage.removeItem("isGuestSession");
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+    setUser(null);
     setNeedsAuth(true);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
         <div className="animate-pulse flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-200 rounded-lg"></div>
-          <div className="h-4 w-24 bg-gray-200 rounded"></div>
+          <div className="w-10 h-10 bg-blue-500/20 rounded-lg"></div>
+          <div className="h-4 w-24 bg-blue-500/30 rounded"></div>
         </div>
       </div>
     );
   }
 
   if (needsAuth) {
-    return <Login onLogin={handleLogin} />;
+    return <Login onLogin={handleLogin} onGuestLogin={handleGuestLogin} />;
   }
 
   return <Dashboard user={user} onLogout={handleLogout} />;

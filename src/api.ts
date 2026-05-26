@@ -29,12 +29,70 @@ const getApiUrl = (path: string): string => {
   return path;
 };
 
-export const fetchFinances = async () => {
+export const fetchFinances = async (spreadsheetId?: string | null) => {
   const token = await getAccessToken();
-  const res = await fetch(getApiUrl("/api/finances"), {
+  const url = spreadsheetId && spreadsheetId !== "guest-spreadsheet" 
+    ? getApiUrl(`/api/finances?spreadsheetId=${spreadsheetId}`) 
+    : getApiUrl("/api/finances");
+  const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) throw new Error("Failed to fetch finances");
+  return res.json();
+};
+
+export const fetchUserSpreadsheets = async () => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/drive/spreadsheets"), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to fetch spreadsheets from Google Drive");
+  return res.json();
+};
+
+export const scanGmailInvoices = async () => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/gmail/scan"), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to scan emails");
+  return res.json();
+};
+
+export const sendEmailReport = async (to: string, subject: string, htmlBody: string) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/gmail/send"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ to, subject, htmlBody })
+  });
+  if (!res.ok) throw new Error("Failed to send email");
+  return res.json();
+};
+
+export const fetchChatSpaces = async () => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/chat/spaces"), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to fetch Chat spaces");
+  return res.json();
+};
+
+export const sendChatMessage = async (spaceId: string, text: string, card?: any) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/chat/message"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ spaceId, text, card })
+  });
+  if (!res.ok) throw new Error("Failed to send message to Google Chat");
   return res.json();
 };
 

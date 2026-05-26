@@ -1,9 +1,44 @@
 import React, { useState, useEffect } from "react";
-import { fetchFinances, addTransaction, addCalendarReminder, sendWANotification, getAISummary, deleteTransaction, resetTransactions, Transaction } from "../api";
+import { 
+  fetchFinances, 
+  addTransaction, 
+  addCalendarReminder, 
+  sendWANotification, 
+  getAISummary, 
+  deleteTransaction, 
+  resetTransactions, 
+  Transaction,
+  fetchUserSpreadsheets
+} from "../api";
 import { format, parseISO } from "date-fns";
 import { id } from "date-fns/locale";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from "recharts";
-import { PlusCircle, Calendar as CalendarIcon, LogOut, ArrowUpCircle, ArrowDownCircle, RefreshCw, Send, Download, Sparkles, Palette, Moon, Sun, User as UserIcon, Trash2, AlertTriangle, Target } from "lucide-react";
+import { 
+  PlusCircle, 
+  Calendar as CalendarIcon, 
+  LogOut, 
+  ArrowUpCircle, 
+  ArrowDownCircle, 
+  RefreshCw, 
+  Send, 
+  Download, 
+  Sparkles, 
+  Palette, 
+  Moon, 
+  Sun, 
+  User as UserIcon, 
+  Trash2, 
+  AlertTriangle, 
+  Target, 
+  Mail, 
+  Search, 
+  Share2, 
+  FolderOpen, 
+  MessageSquare, 
+  Check, 
+  X,
+  PieChart as PieChartIcon
+} from "lucide-react";
 
 const BrandLogo = ({ className = "w-12 h-12" }: { className?: string }) => {
   return (
@@ -73,6 +108,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Sheets, Gmail & Chat workspace state variables
+  const [spreadsheetsList, setSpreadsheetsList] = useState<any[]>([]);
+  const [loadingSpreadsheets, setLoadingSpreadsheets] = useState(false);
   
   // Forms
   const [isAdding, setIsAdding] = useState(false);
@@ -230,13 +269,42 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     }
   };
 
-  const loadData = async () => {
+  const [customSpreadsheetId, setCustomSpreadsheetId] = useState<string | null>("monthly");
+
+  const loadSpreadsheetsList = async () => {
+    if (user?.isGuest) return;
+    try {
+      setLoadingSpreadsheets(true);
+      const res = await fetchUserSpreadsheets();
+      setSpreadsheetsList(res.files || []);
+    } catch (e: any) {
+      console.error("Gagal mengambil daftar spreadsheet:", e);
+    } finally {
+      setLoadingSpreadsheets(false);
+    }
+  };
+
+  const handleCustomSpreadsheetChange = async (sheetId: string) => {
+    setCustomSpreadsheetId(sheetId);
+    await loadData(sheetId);
+    showToast(sheetId === "monthly" ? "Menggunakan database bulanan otomatis" : "Menggunakan spreadsheet GDrive terpilih", "success");
+  };
+
+  const loadData = async (targetId?: string | null) => {
     try {
       setLoading(true);
       setError("");
-      const data = await fetchFinances();
-      setTransactions(data.transactions);
-      setSpreadsheetId(data.spreadsheetId);
+      if (user?.isGuest) {
+        const stored = localStorage.getItem("guest_transactions");
+        const txs = stored ? JSON.parse(stored) : [];
+        setTransactions(txs);
+        setSpreadsheetId("guest-spreadsheet");
+      } else {
+        const activeId = targetId !== undefined ? targetId : customSpreadsheetId;
+        const data = await fetchFinances(activeId);
+        setTransactions(data.transactions);
+        setSpreadsheetId(data.spreadsheetId);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -246,6 +314,9 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
   useEffect(() => {
     loadData();
+    if (!user?.isGuest) {
+      loadSpreadsheetsList();
+    }
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -253,27 +324,54 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     if (!spreadsheetId) return;
     try {
       setIsAdding(true);
-      await addTransaction({
-        spreadsheetId,
-        amount: Number(amount),
-        type,
-        category,
-        description: desc,
-        date
-      });
-      // Auto WA Notification
-      if (waNotify && phone) {
-         const now = new Date();
-         const timeString = format(now, "HH:mm");
-         const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
-         const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${Number(amount).toLocaleString("id-ID")}\nKeterangan: ${desc}`;
-         const res = await sendWANotification(phone, msg);
-         if (res.waLink) {
-           window.open(res.waLink, "_blank");
-         }
+      if (user?.isGuest) {
+        const newTx: Transaction = {
+          id: Date.now().toString(),
+          amount: Number(amount),
+          type,
+          category,
+          description: desc,
+          date
+        };
+        const stored = localStorage.getItem("guest_transactions");
+        const txs = stored ? JSON.parse(stored) : [];
+        const updated = [newTx, ...txs];
+        localStorage.setItem("guest_transactions", JSON.stringify(updated));
+        setTransactions(updated);
+
+        // Auto WA Notification
+        if (waNotify && phone) {
+           const now = new Date();
+           const timeString = format(now, "HH:mm");
+           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
+           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${Number(amount).toLocaleString("id-ID")}\nKeterangan: ${desc}`;
+           const res = await sendWANotification(phone, msg);
+           if (res.waLink) {
+             window.open(res.waLink, "_blank");
+           }
+        }
+      } else {
+        await addTransaction({
+          spreadsheetId,
+          amount: Number(amount),
+          type,
+          category,
+          description: desc,
+          date
+        });
+        // Auto WA Notification
+        if (waNotify && phone) {
+           const now = new Date();
+           const timeString = format(now, "HH:mm");
+           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
+           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${Number(amount).toLocaleString("id-ID")}\nKeterangan: ${desc}`;
+           const res = await sendWANotification(phone, msg);
+           if (res.waLink) {
+             window.open(res.waLink, "_blank");
+           }
+        }
       }
       showToast("Transaksi berhasil ditambahkan!", "success");
-      // reload
       await loadData();
       setAmount("");
       setDesc("");
@@ -291,12 +389,21 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       return;
     }
     try {
-      const res = await addCalendarReminder(reminderSummary, "Pengingat dari Keuanganku", new Date(reminderDate).toISOString());
-      showToast("Pengingat berhasil ditambahkan!", "success");
-      setReminderSummary("");
-      setReminderDate("");
-      if (res.eventLink) {
-        window.open(res.eventLink, "_blank");
+      if (user?.isGuest) {
+        const localReminders = JSON.parse(localStorage.getItem("guest_reminders") || "[]");
+        const newReminder = { id: Date.now().toString(), summary: reminderSummary, date: reminderDate };
+        localStorage.setItem("guest_reminders", JSON.stringify([...localReminders, newReminder]));
+        showToast("Pengingat berhasil disimpan lokal (Mode Tamu)!", "success");
+        setReminderSummary("");
+        setReminderDate("");
+      } else {
+        const res = await addCalendarReminder(reminderSummary, "Pengingat dari Keuanganku", new Date(reminderDate).toISOString());
+        showToast("Pengingat berhasil ditambahkan!", "success");
+        setReminderSummary("");
+        setReminderDate("");
+        if (res.eventLink) {
+          window.open(res.eventLink, "_blank");
+        }
       }
     } catch (err: any) {
       showToast("Gagal menambahkan pengingat: " + err.message, "error");
@@ -311,9 +418,18 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       async () => {
         try {
           setDeletingId(id);
-          await deleteTransaction(id, spreadsheetId);
-          showToast("Transaksi berhasil dihapus", "success");
-          await loadData();
+          if (user?.isGuest) {
+            const stored = localStorage.getItem("guest_transactions");
+            const txs: Transaction[] = stored ? JSON.parse(stored) : [];
+            const updated = txs.filter(t => t.id !== id);
+            localStorage.setItem("guest_transactions", JSON.stringify(updated));
+            setTransactions(updated);
+            showToast("Transaksi berhasil dihapus", "success");
+          } else {
+            await deleteTransaction(id, spreadsheetId);
+            showToast("Transaksi berhasil dihapus", "success");
+            await loadData();
+          }
         } catch (err: any) {
           showToast("Gagal menghapus transaksi: " + err.message, "error");
         } finally {
@@ -327,13 +443,19 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     if (!spreadsheetId) return;
     showConfirm(
       "Reset Semua Transaksi",
-      "PERINGATAN: Semua data transaksi akan dihapus secara permanen dari spreadsheet Anda. Tindakan ini tidak dapat dibatalkan.",
+      "PERINGATAN: Semua data transaksi akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.",
       async () => {
         try {
           setIsResetting(true);
-          await resetTransactions(spreadsheetId);
-          showToast("Seluruh transaksi berhasil direset", "success");
-          await loadData();
+          if (user?.isGuest) {
+            localStorage.removeItem("guest_transactions");
+            setTransactions([]);
+            showToast("Seluruh transaksi berhasil direset", "success");
+          } else {
+            await resetTransactions(spreadsheetId);
+            showToast("Seluruh transaksi berhasil direset", "success");
+            await loadData();
+          }
         } catch (err: any) {
           showToast("Gagal mereset transaksi: " + err.message, "error");
         } finally {
@@ -549,6 +671,41 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           </div>
         ) : (
           <>
+        {/* Workspace Database Selector */}
+        {!user?.isGuest && (
+          <div className={`${ui.panelBg} backdrop-blur-xl border p-4 ${ui.panelRadius} flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-500`}>
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-green-500/10 text-green-500">
+                <FolderOpen className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h4 className={`text-sm font-bold ${ui.textMain}`}>Database GSheet Terhubung</h4>
+                <p className={`text-xs ${ui.textMuted}`}>Pilih file spreadsheet dari Google Drive anda</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={customSpreadsheetId || "monthly"}
+                onChange={(e) => handleCustomSpreadsheetChange(e.target.value)}
+                className={`w-full sm:w-64 ${ui.inputBg} border ${ui.inputRadius} px-3 py-2 text-xs focus:ring-2 ${theme.focus} outline-none cursor-pointer`}
+              >
+                <option value="monthly">📂 Koleksi Bulanan Otomatis</option>
+                {spreadsheetsList.map(item => (
+                  <option key={item.id} value={item.id}>📄 {item.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={loadSpreadsheetsList}
+                disabled={loadingSpreadsheets}
+                className={`p-2 rounded-xl border ${isLight ? 'border-slate-200 text-slate-700' : 'border-white/10 text-slate-300'} hover:opacity-80 transition-opacity`}
+                title="Refresh Daftar Spreadsheet GDrive"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingSpreadsheets ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Overview Stats & Budget */}
         <div className="space-y-4">
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -787,7 +944,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             {/* Chart */}
             <div className={`${ui.panelBg} backdrop-blur-xl border ${ui.panelRadius} p-6 flex flex-col transition-all duration-500`}>
               <h3 className={`text-sm font-bold ${ui.textMain} mb-6 uppercase tracking-wide flex items-center gap-2`}>
-                <PieChart className={`w-4 h-4 ${theme.icon}`} /> Distribusi Pengeluaran
+                <PieChartIcon className={`w-4 h-4 ${theme.icon}`} /> Distribusi Pengeluaran
               </h3>
               {chartData.length > 0 ? (
                 <div className="h-48 w-full">
@@ -857,10 +1014,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               )}
             </div>
 
+
             {/* Integrations */}
             <div className={`${isLight ? 'bg-white/60 border-slate-200 text-slate-700' : 'bg-black/40 border-white/5 text-slate-200'} backdrop-blur-xl border ${ui.panelRadius} p-6 shadow-md transition-colors`}>
               <h3 className={`text-[10px] font-bold mb-4 flex items-center gap-2 uppercase tracking-widest ${theme.icon}`}>
-                <CalendarIcon className="w-4 h-4" /> Pengingat
+                <CalendarIcon className="w-4 h-4" /> Pengingat Kalender
               </h3>
               <form onSubmit={handleAddReminder} className="space-y-3">
                 <input 
@@ -887,7 +1045,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             <div className={`${ui.panelBg} backdrop-blur-xl border rounded-3xl p-6 transition-colors`}>
               <div className="flex items-center justify-between mb-2">
                 <h3 className={`text-[10px] font-bold flex items-center gap-2 uppercase tracking-widest ${ui.textMuted}`}>
-                  <Send className={`w-4 h-4 ${isLight ? 'text-green-600' : 'text-green-400'}`} /> WhatsApp
+                  <Send className={`w-4 h-4 ${isLight ? 'text-green-600' : 'text-green-400'}`} /> WhatsApp Notify
                 </h3>
                 <div className={`px-2 py-0.5 ${isLight ? 'bg-green-100 text-green-700 border-green-200' : 'bg-green-500/20 text-green-400 border-green-500/20'} text-[10px] rounded-full border`}>Aktif</div>
               </div>

@@ -1,12 +1,13 @@
-export const Login = ({ onLogin }: { onLogin: () => void }) => {
+
+export const Login = ({ onLogin, onGuestLogin }: { onLogin: () => void; onGuestLogin: () => void }) => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] text-slate-100 relative overflow-hidden font-sans">
+    <div className="min-h-screen flex items-center justify-center bg-[#020617] text-slate-100 relative overflow-hidden font-sans py-12 px-4">
       {/* Mesh Background Decorative Elements */}
       <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none -z-10" />
       <div className="absolute bottom-[-5%] left-[-5%] w-[400px] h-[400px] bg-indigo-900/30 rounded-full blur-[100px] pointer-events-none -z-10" />
 
-      <div className="w-full max-w-md p-8 bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col z-10">
-        <div className="flex justify-center mb-10">
+      <div className="w-full max-w-md p-8 bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col z-10 transition-all duration-300">
+        <div className="flex justify-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)]">
             <svg
               className="w-8 h-8 text-white"
@@ -28,13 +29,13 @@ export const Login = ({ onLogin }: { onLogin: () => void }) => {
         <h1 className="text-3xl font-bold text-center text-white tracking-tight mb-2">
           Keuanganku
         </h1>
-        <p className="text-center text-slate-400 mb-10 text-sm">
-          Integrasi Google Workspace
+        <p className="text-center text-slate-400 mb-8 text-sm">
+          Aplikasi Manajemen Keuangan Anda
         </p>
 
         <button
           onClick={onLogin}
-          className="w-full relative group overflow-hidden bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 transition-colors rounded-2xl py-4 px-6 flex flex-col items-center justify-center font-semibold text-white shadow-lg"
+          className="w-full relative group overflow-hidden bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 transition-colors rounded-2xl py-4 px-6 flex flex-col items-center justify-center font-semibold text-white shadow-lg cursor-pointer"
         >
           <div className="flex items-center space-x-3">
             <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-6 h-6">
@@ -48,8 +49,26 @@ export const Login = ({ onLogin }: { onLogin: () => void }) => {
           </div>
         </button>
 
+        <div className="flex items-center my-6">
+          <div className="flex-1 border-t border-white/10"></div>
+          <span className="px-3 text-xs text-slate-500 uppercase tracking-widest">Atau</span>
+          <div className="flex-1 border-t border-white/10"></div>
+        </div>
+
+        <button
+          onClick={onGuestLogin}
+          className="w-full bg-gradient-to-r from-blue-600/10 to-indigo-600/10 hover:from-blue-600/20 hover:to-indigo-600/20 border border-blue-500/20 hover:border-blue-500/40 transition-all rounded-2xl py-4 px-6 flex items-center justify-center font-semibold text-blue-400 shadow-md group cursor-pointer"
+        >
+          <div className="flex items-center space-x-3">
+            <svg className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span>Masuk sebagai Tamu (Uji Coba)</span>
+          </div>
+        </button>
+
         <p className="mt-8 text-xs text-center text-slate-500 max-w-xs mx-auto leading-relaxed">
-          Dengan masuk, aplikasi akan meminta akses ke Google Drive, Google Sheets, dan Google Calendar.
+          Google Login memerlukan akses ke Google Drive (untuk spreadsheet data keuangan) dan Google Calendar (untuk Integrasi Pengingat). Jika Anda hanya ingin mencoba aplikasi secara lokal, pilih opsi Tamu.
         </p>
       </div>
     </div>
