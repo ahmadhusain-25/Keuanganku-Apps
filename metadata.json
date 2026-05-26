@@ -1,0 +1,6 @@
+{
+  "name": "Keuanganku",
+  "description": "Aplikasi manajemen keuangan berbasis web dengan integrasi Google Workspace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
