@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from "firebase/auth";
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, User } from "firebase/auth";
 import firebaseConfig from "../firebase-applet-config.json";
 
 const app = initializeApp(firebaseConfig);
@@ -39,6 +39,24 @@ export const initAuth = (
   });
 };
 
+export const handleRedirectResult = async (): Promise<{ user: User; accessToken: string } | null> => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        localStorage.setItem("googleAccessToken", cachedAccessToken);
+        return { user: result.user, accessToken: cachedAccessToken };
+      }
+    }
+  } catch (error) {
+    console.error("Redirect resolution error:", error);
+    throw error;
+  }
+  return null;
+};
+
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
@@ -53,10 +71,26 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error("Sign in error:", error);
+    
+    // Fallback to Redirect automatically if popup is blocked
+    if (
+      error?.code === "auth/popup-blocked" || 
+      error?.message?.indexOf("popup") !== -1 ||
+      error?.message?.indexOf("blocked") !== -1
+    ) {
+      console.log("Popup blocked by browser. Redirecting instead...");
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
     throw error;
   } finally {
     isSigningIn = false;
   }
+};
+
+export const googleSignInRedirect = async (): Promise<void> => {
+  isSigningIn = true;
+  await signInWithRedirect(auth, provider);
 };
 
 export const getAccessToken = async (): Promise<string | null> => {

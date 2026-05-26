@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { initAuth, googleSignIn, logout } from "./auth";
+import { initAuth, googleSignIn, googleSignInRedirect, logout, handleRedirectResult } from "./auth";
 import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
 
@@ -23,19 +23,46 @@ export default function App() {
       return;
     }
 
-    const unsubscribe = initAuth(
-      (u) => {
-        setUser(u);
-        setNeedsAuth(false);
-        setLoading(false);
-      },
-      () => {
-        setUser(null);
-        setNeedsAuth(true);
-        setLoading(false);
+    let isSubscribed = true;
+    let unsubscribe: (() => void) | null = null;
+
+    const checkRedirectAndInit = async () => {
+      try {
+        const redirectResult = await handleRedirectResult();
+        if (redirectResult && isSubscribed) {
+          setUser(redirectResult.user);
+          setNeedsAuth(false);
+          setLoading(false);
+          return;
+        }
+      } catch (err: any) {
+        console.error("Error resolving redirect result on load:", err);
       }
-    );
-    return () => unsubscribe();
+
+      if (!isSubscribed) return;
+
+      unsubscribe = initAuth(
+        (u) => {
+          if (!isSubscribed) return;
+          setUser(u);
+          setNeedsAuth(false);
+          setLoading(false);
+        },
+        () => {
+          if (!isSubscribed) return;
+          setUser(null);
+          setNeedsAuth(true);
+          setLoading(false);
+        }
+      );
+    };
+
+    checkRedirectAndInit();
+
+    return () => {
+      isSubscribed = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const handleLogin = async () => {
@@ -69,10 +96,20 @@ export default function App() {
                "Solusi:\n" +
                "Silakan klik ikon 'Open in New Tab' (↗) di pojok kanan atas pratinjau untuk membuka aplikasi di tab baru, kemudian coba login dari sana.";
       } else {
-        msg += "Pastikan izin popup browser Anda diaktifkan, koneksi internet stabil, lalu silakan coba kembali.";
+        msg += "Pastikan izin popup browser Anda diaktifkan, koneksi internet stabil, atau gunakan tombol 'Masuk dengan metode Alt/Redirect' dibawah.";
       }
       
       alert(msg);
+    }
+  };
+
+  const handleRedirectLogin = async () => {
+    try {
+      localStorage.removeItem("isGuestSession");
+      await googleSignInRedirect();
+    } catch (e: any) {
+      console.error("Redirect sign in error:", e);
+      alert(`Gagal login via Redirect: ${e?.message || e}`);
     }
   };
 
@@ -111,7 +148,7 @@ export default function App() {
   }
 
   if (needsAuth) {
-    return <Login onLogin={handleLogin} onGuestLogin={handleGuestLogin} />;
+    return <Login onLogin={handleLogin} onRedirectLogin={handleRedirectLogin} onGuestLogin={handleGuestLogin} />;
   }
 
   return <Dashboard user={user} onLogout={handleLogout} />;
