@@ -12,8 +12,6 @@ provider.addScope("https://www.googleapis.com/auth/spreadsheets");
 provider.addScope("https://www.googleapis.com/auth/calendar.events");
 provider.addScope("https://www.googleapis.com/auth/gmail.readonly");
 provider.addScope("https://www.googleapis.com/auth/gmail.send");
-provider.addScope("https://www.googleapis.com/auth/chat.messages.create");
-provider.addScope("https://www.googleapis.com/auth/chat.spaces.readonly");
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;

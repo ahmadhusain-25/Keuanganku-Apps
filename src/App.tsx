@@ -46,9 +46,16 @@ export default function App() {
         setUser(res.user);
         setNeedsAuth(false);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to sign in. Please try again.");
+      const isIframe = window.self !== window.top;
+      if (isIframe) {
+        alert(
+          "Gagal Masuk Google:\n\nHal ini disebabkan karena pembatasan keamanan cookie pihak ketiga browser saat aplikasi berada di dalam iframe preview AI Studio.\n\nSolusi:\nSilakan klik ikon 'Open in New Tab' (↗) di pojok kanan atas layar preview untuk membuka aplikasi di tab baru asli, lalu login dari sana."
+        );
+      } else {
+        alert("Gagal masuk dengan Google. Pastikan izin popup browser Anda diaktifkan dan coba kembali.");
+      }
     }
   };
 

@@ -1,5 +1,13 @@
 
+import { useEffect, useState } from "react";
+
 export const Login = ({ onLogin, onGuestLogin }: { onLogin: () => void; onGuestLogin: () => void }) => {
+  const [isIframe, setIsIframe] = useState(false);
+
+  useEffect(() => {
+    setIsIframe(window.self !== window.top);
+  }, []);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#020617] text-slate-100 relative overflow-hidden font-sans py-12 px-4">
       {/* Mesh Background Decorative Elements */}
@@ -7,7 +15,7 @@ export const Login = ({ onLogin, onGuestLogin }: { onLogin: () => void; onGuestL
       <div className="absolute bottom-[-5%] left-[-5%] w-[400px] h-[400px] bg-indigo-900/30 rounded-full blur-[100px] pointer-events-none -z-10" />
 
       <div className="w-full max-w-md p-8 bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col z-10 transition-all duration-300">
-        <div className="flex justify-center mb-8">
+        <div className="flex justify-center mb-6">
           <div className="w-16 h-16 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)]">
             <svg
               className="w-8 h-8 text-white"
@@ -29,9 +37,21 @@ export const Login = ({ onLogin, onGuestLogin }: { onLogin: () => void; onGuestL
         <h1 className="text-3xl font-bold text-center text-white tracking-tight mb-2">
           Keuanganku
         </h1>
-        <p className="text-center text-slate-400 mb-8 text-sm">
+        <p className="text-center text-slate-400 mb-6 text-sm">
           Aplikasi Manajemen Keuangan Anda
         </p>
+
+        {isIframe && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex flex-col gap-1.5 transition-all">
+            <div className="flex items-center gap-1.5 font-bold">
+              <span className="text-sm">⚠️</span>
+              Hubungkan Akun Google:
+            </div>
+            <p className="leading-relaxed opacity-90">
+              Browser pihak ketiga membatasi login di dalam panel frame preview ini. Jika proses masuk terhambat atau popup tertutup otomatis, silakan klik ikon <strong>"Open in New Tab" (↗)</strong> di pojok kanan atas preview untuk membuka aplikasi di tab baru, lalu login dari sana.
+            </p>
+          </div>
+        )}
 
         <button
           onClick={onLogin}
