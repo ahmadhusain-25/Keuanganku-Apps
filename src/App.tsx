@@ -47,15 +47,32 @@ export default function App() {
         setNeedsAuth(false);
       }
     } catch (e: any) {
-      console.error(e);
+      console.error("Sign in error:", e);
       const isIframe = window.self !== window.top;
-      if (isIframe) {
-        alert(
-          "Gagal Masuk Google:\n\nHal ini disebabkan karena pembatasan keamanan cookie pihak ketiga browser saat aplikasi berada di dalam iframe preview AI Studio.\n\nSolusi:\nSilakan klik ikon 'Open in New Tab' (↗) di pojok kanan atas layar preview untuk membuka aplikasi di tab baru asli, lalu login dari sana."
-        );
+      const errorCode = e?.code || "";
+      const errorMessage = e?.message || "";
+      
+      let msg = `Gagal login dengan Google.\n\nDetail Error: [${errorCode}] ${errorMessage}\n\n`;
+      
+      if (errorCode === "auth/unauthorized-domain") {
+        msg += "⚠️ DOMAIN BELUM DIAUTORISASI DI FIREBASE:\n" +
+               "Silakan tambahkan domain aplikasi ini ke daftar 'Authorized Domains' di Firebase Console agar Google Sign-In dapat berfungsi:\n\n" +
+               "1. Buka Firebase Console (https://console.firebase.google.com/)\n" +
+               "2. Pilih proyek Anda -> Masuk ke menu 'Authentication' di bilah samping.\n" +
+               "3. Klik tab 'Settings' -> pilih 'Authorized Domains'.\n" +
+               "4. Klik 'Add Domain' lalu tambahkan domain berikut:\n" +
+               `   👉 ${window.location.hostname}\n\n` +
+               "Setelah ditambahkan, silakan coba login kembali.";
+      } else if (isIframe) {
+        msg += "⚠️ MASALAH BROWSER / IFRAME:\n" +
+               "Browser membatasi cookie pihak ketiga di dalam iframe panel pratinjau AI Studio.\n\n" +
+               "Solusi:\n" +
+               "Silakan klik ikon 'Open in New Tab' (↗) di pojok kanan atas pratinjau untuk membuka aplikasi di tab baru, kemudian coba login dari sana.";
       } else {
-        alert("Gagal masuk dengan Google. Pastikan izin popup browser Anda diaktifkan dan coba kembali.");
+        msg += "Pastikan izin popup browser Anda diaktifkan, koneksi internet stabil, lalu silakan coba kembali.";
       }
+      
+      alert(msg);
     }
   };
 
