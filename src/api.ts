@@ -9,9 +9,29 @@ export interface Transaction {
   description: string;
 }
 
+const getApiUrl = (path: string): string => {
+  const envApiUrl = (import.meta as any).env?.VITE_API_URL || "";
+  if (envApiUrl) {
+    return `${envApiUrl.replace(/\/$/, '')}${path}`;
+  }
+  
+  if (typeof window !== "undefined") {
+    const isCapacitor = (window as any).Capacitor !== undefined || 
+                        window.location.protocol === "capacitor:" || 
+                        window.location.protocol === "file:" || 
+                        (window.location.hostname === "localhost" && window.location.port !== "3000" && window.location.port !== "5173");
+    if (isCapacitor) {
+      // Automatic fallback to the hosted Cloud Run server for backend API queries
+      const fallbackUrl = "https://ais-pre-ndcddgji24pefrldtuhrjy-603348755685.asia-southeast1.run.app";
+      return `${fallbackUrl}${path}`;
+    }
+  }
+  return path;
+};
+
 export const fetchFinances = async () => {
   const token = await getAccessToken();
-  const res = await fetch("/api/finances", {
+  const res = await fetch(getApiUrl("/api/finances"), {
     headers: { Authorization: `Bearer ${token}` }
   });
   if (!res.ok) throw new Error("Failed to fetch finances");
@@ -20,7 +40,7 @@ export const fetchFinances = async () => {
 
 export const addTransaction = async (data: Omit<Transaction, "id"> & { spreadsheetId: string }) => {
   const token = await getAccessToken();
-  const res = await fetch("/api/finances", {
+  const res = await fetch(getApiUrl("/api/finances"), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,
@@ -38,7 +58,7 @@ export const addCalendarReminder = async (summary: string, description: string, 
   // 1 hour later
   const endDateTime = new Date(new Date(dateStr).getTime() + 60 * 60 * 1000).toISOString();
   
-  const res = await fetch("/api/calendar/reminder", {
+  const res = await fetch(getApiUrl("/api/calendar/reminder"), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,
@@ -52,7 +72,7 @@ export const addCalendarReminder = async (summary: string, description: string, 
 
 export const sendWANotification = async (phone: string, message: string) => {
   const token = await getAccessToken();
-  const res = await fetch("/api/whatsapp/notify", {
+  const res = await fetch(getApiUrl("/api/whatsapp/notify"), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,
@@ -66,7 +86,7 @@ export const sendWANotification = async (phone: string, message: string) => {
 
 export const getAISummary = async (transactions: Transaction[]) => {
   const token = await getAccessToken();
-  const res = await fetch("/api/ai/summary", {
+  const res = await fetch(getApiUrl("/api/ai/summary"), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,
@@ -80,7 +100,7 @@ export const getAISummary = async (transactions: Transaction[]) => {
 
 export const deleteTransaction = async (id: string, spreadsheetId: string) => {
   const token = await getAccessToken();
-  const res = await fetch(`/api/finances/${id}?spreadsheetId=${spreadsheetId}`, {
+  const res = await fetch(getApiUrl(`/api/finances/${id}?spreadsheetId=${spreadsheetId}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -90,7 +110,7 @@ export const deleteTransaction = async (id: string, spreadsheetId: string) => {
 
 export const resetTransactions = async (spreadsheetId: string) => {
   const token = await getAccessToken();
-  const res = await fetch(`/api/finances?spreadsheetId=${spreadsheetId}`, {
+  const res = await fetch(getApiUrl(`/api/finances?spreadsheetId=${spreadsheetId}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
   });

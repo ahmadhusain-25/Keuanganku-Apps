@@ -8,9 +8,18 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cap:add-android": "cap add android",
+    "cap:add-ios": "cap add ios",
+    "cap:sync": "cap sync",
+    "cap:open-android": "cap open android",
+    "cap:open-ios": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
