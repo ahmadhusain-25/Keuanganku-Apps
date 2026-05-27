@@ -1,5 +1,8 @@
-
 import { useEffect, useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
+import { Separator } from "./ui/separator";
+import { AlertCircle, Chrome, ShieldAlert, ArrowRightLeft, UserCheck } from "lucide-react";
 
 export const Login = ({ 
   onLogin, 
@@ -16,98 +19,162 @@ export const Login = ({
     setIsIframe(window.self !== window.top);
   }, []);
 
+  const colors = {
+    primary: '#6a8d73',
+    lightYellow: '#f4fdd9',
+    frostedMint: '#e4ffe1',
+    wheat: '#ffe8c2',
+    sandyBrown: '#f0a868'
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] text-slate-100 relative overflow-hidden font-sans py-12 px-4">
-      {/* Mesh Background Decorative Elements */}
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none -z-10" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[400px] h-[400px] bg-indigo-900/30 rounded-full blur-[100px] pointer-events-none -z-10" />
+    <div 
+      className="min-h-screen flex items-center justify-center p-4 transition-colors duration-300 relative overflow-hidden" 
+      style={{ backgroundColor: colors.lightYellow }}
+    >
+      {/* Dynamic abstract shapes for visual depth */}
+      <div 
+        className="absolute top-[-10%] right-[-10%] w-[350px] h-[350px] rounded-full blur-[80px] pointer-events-none -z-10 opacity-60"
+        style={{ backgroundColor: colors.frostedMint }}
+      />
+      <div 
+        className="absolute bottom-[-10%] left-[-10%] w-[350px] h-[350px] rounded-full blur-[80px] pointer-events-none -z-10 opacity-60"
+        style={{ backgroundColor: colors.wheat }}
+      />
 
-      <div className="w-full max-w-md p-8 bg-white/5 backdrop-blur-2xl rounded-3xl border border-white/10 shadow-2xl flex flex-col z-10 transition-all duration-300">
-        <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
+      <Card 
+        className="w-full max-w-md shadow-2xl border-2 bg-white/95 backdrop-blur-md rounded-3xl transition-transform duration-300 hover:scale-[1.01]" 
+        style={{ borderColor: colors.primary }}
+      >
+        <CardHeader className="space-y-3 text-center pb-1">
+          <div className="flex justify-center mb-2">
+            <img 
+              src="/logo.png" 
+              alt="Kuanganku Logo" 
+              className="h-24 md:h-28 object-contain transition-transform hover:scale-105 duration-300"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fallback = document.createElement('div');
+                fallback.className = 'p-4 rounded-3xl flex items-center justify-center shadow-lg';
+                fallback.style.backgroundColor = colors.primary;
+                fallback.style.color = 'white';
+                fallback.innerHTML = `
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
+                    <path d="M12 18V6"/>
+                  </svg>
+                `;
+                e.currentTarget.parentNode?.appendChild(fallback);
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <CardTitle className="text-3xl font-extrabold tracking-tight" style={{ color: colors.primary }}>
+              Kuanganku
+            </CardTitle>
+            <CardDescription className="text-zinc-600 font-medium">Catatan Keuangan Pintar</CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* Custom Informative Warning for iFrame Sandbox restrictions if active */}
+          {isIframe && (
+            <div 
+              className="p-4 rounded-2xl border flex gap-3 text-xs shadow-sm transition-all animate-pulse"
+              style={{ 
+                backgroundColor: colors.wheat, 
+                borderColor: colors.sandyBrown,
+                color: '#854d0e'
+              }}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        <h1 className="text-3xl font-bold text-center text-white tracking-tight mb-2">
-          Keuanganku
-        </h1>
-        <p className="text-center text-slate-400 mb-6 text-sm">
-          Aplikasi Manajemen Keuangan Anda
-        </p>
-
-        {isIframe && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex flex-col gap-1.5 transition-all">
-            <div className="flex items-center gap-1.5 font-bold">
-              <span className="text-sm">⚠️</span>
-              Hubungkan Akun Google:
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.sandyBrown }} />
+              <div className="space-y-1">
+                <p className="font-bold text-[13px]">Informasi Login Google:</p>
+                <p className="leading-relaxed opacity-95">
+                  Jika proses masuk terhambat atau popup menutup sendiri karena pembatasan cookie browser pada panel pratinjau, silakan klik ikon <strong>"Open in New Tab" (↗)</strong> di kanan atas pratinjau, lalu coba masuk kembali di tab baru.
+                </p>
+              </div>
             </div>
-            <p className="leading-relaxed opacity-90">
-              Browser pihak ketiga membatasi login di dalam panel frame preview ini. Jika proses masuk terhambat atau popup tertutup otomatis, silakan klik ikon <strong>"Open in New Tab" (↗)</strong> di pojok kanan atas preview untuk membuka aplikasi di tab baru, lalu login dari sana.
-            </p>
-          </div>
-        )}
+          )}
 
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={onLogin}
-            className="w-full relative group overflow-hidden bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 transition-colors rounded-2xl py-4 px-6 flex flex-col items-center justify-center font-semibold text-white shadow-lg cursor-pointer"
-          >
-            <div className="flex items-center space-x-3">
-              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-6 h-6">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                <path fill="none" d="M0 0h48v48H0z"></path>
+          <div className="flex flex-col gap-3.5 pt-2">
+            {/* Main Sign in Button (Popup Method) */}
+            <Button
+              onClick={onLogin}
+              className="w-full h-13 rounded-2xl text-white font-bold text-base hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-3 border border-transparent"
+              style={{ backgroundColor: colors.primary }}
+            >
+              {/* Google SVG Icon */}
+              <svg className="w-5.5 h-5.5 shrink-0" viewBox="0 0 24 24">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#ffffff"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#ffffff"
+                  opacity="0.85"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#ffffff"
+                  opacity="0.8"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#ffffff"
+                  opacity="0.9"
+                />
               </svg>
               <span>Masuk dengan Google</span>
-            </div>
-          </button>
+            </Button>
 
-          <button
-            onClick={onRedirectLogin}
-            className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 transition-all rounded-2xl py-3 px-6 flex items-center justify-center text-sm font-medium text-blue-300 cursor-pointer"
-          >
-            Masuk dengan Google (Redirect / Cadangan)
-          </button>
-        </div>
-
-        <div className="flex items-center my-6">
-          <div className="flex-1 border-t border-white/10"></div>
-          <span className="px-3 text-xs text-slate-500 uppercase tracking-widest">Atau</span>
-          <div className="flex-1 border-t border-white/10"></div>
-        </div>
-
-        <button
-          onClick={onGuestLogin}
-          className="w-full bg-gradient-to-r from-blue-600/10 to-indigo-600/10 hover:from-blue-600/20 hover:to-indigo-600/20 border border-blue-500/20 hover:border-blue-500/40 transition-all rounded-2xl py-4 px-6 flex items-center justify-center font-semibold text-blue-400 shadow-md group cursor-pointer"
-        >
-          <div className="flex items-center space-x-3">
-            <svg className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <span>Masuk sebagai Tamu (Uji Coba)</span>
+            {/* Backup Sign in Button (Redirect Method) */}
+            <Button
+              onClick={onRedirectLogin}
+              variant="outline"
+              className="w-full h-11 rounded-2xl font-semibold text-sm transition-all cursor-pointer flex items-center justify-center gap-2"
+              style={{ 
+                borderColor: '#6a8d73', 
+                color: '#4e6d55',
+                backgroundColor: 'rgba(106, 141, 115, 0.05)'
+              }}
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              <span>Masuk via Google Redirect</span>
+            </Button>
           </div>
-        </button>
 
-        <p className="mt-8 text-xs text-center text-slate-500 max-w-xs mx-auto leading-relaxed">
-          Google Login memerlukan akses ke Google Drive (untuk spreadsheet data keuangan) dan Google Calendar (untuk Integrasi Pengingat). Jika Anda hanya ingin mencoba aplikasi secara lokal, pilih opsi Tamu.
-        </p>
-      </div>
+          <div className="relative my-2 py-2">
+            <div className="absolute inset-0 flex items-center">
+              <Separator />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-3 font-semibold text-zinc-400">Atau</span>
+            </div>
+          </div>
+
+          {/* Test/Trial Guest account button */}
+          <Button
+            onClick={onGuestLogin}
+            variant="outline"
+            className="w-full h-13 rounded-2xl font-bold text-base transition-all cursor-pointer flex items-center justify-center gap-3 border shadow-sm"
+            style={{ 
+              backgroundColor: colors.frostedMint, 
+              borderColor: colors.primary,
+              color: '#34523b'
+            }}
+          >
+            <UserCheck className="w-5.5 h-5.5 text-[#4a6b52]" />
+            <span>Masuk sebagai Tamu (Uji Coba)</span>
+          </Button>
+
+          <p className="text-[11px] font-medium text-center text-zinc-500 max-w-sm mx-auto leading-relaxed pt-2">
+            Masuk dengan Google diperlukan untuk menyinkronkan data dengan Google Sheets, Google Calendar & Gmail Anda. Pilih opsi Tamu jika ingin mencoba secara lokal tanpa integrasi.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 };
