@@ -521,6 +521,47 @@ async function startServer() {
     }
   });
 
+  // AI Chat Assistant
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { message, history = [], transactions = [] } = req.body;
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+
+      const systemInstruction = `Anda adalah "Owi", burung hantu pintar yang lucu, bijaksana, dan sangat ramah yang bertindak sebagai Asisten Keuangan Pribadi di aplikasi Keuanganku.
+Karakter Anda:
+- Sangat ahli dalam manajemen keuangan, rencana anggaran, strategi menabung, investasi, dan tips hemat yang cerdas.
+- Berbicara dengan gaya ramah, penuh semangat, bijak, namun santai menggunakan bahasa Indonesia.
+- Gunakan emoji burung hantu (🦉), koin (🪙), buku catatan (📝), grafik naik (📈), atau hati (💚) secara kreatif untuk menyemangati pengguna.
+- Panggil pengguna dengan sebutan hangat seperti "Teman Catat" atau "Sobat Hemat".
+- Berikan saran yang praktis, solutif, dan tidak bertele-tele.
+
+Konteks Transaksi Pengguna Saat Ini:
+${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada transaksi catat terinput."}
+`;
+
+      const formattedContents = [
+        ...history,
+        { role: "user", parts: [{ text: message }] }
+      ];
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: formattedContents,
+        config: {
+          systemInstruction: systemInstruction,
+        }
+      });
+
+      res.json({ text: response.text });
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

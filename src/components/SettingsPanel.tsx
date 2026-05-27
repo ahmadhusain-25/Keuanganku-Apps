@@ -16,7 +16,6 @@ import {
   Check,
   ChevronRight,
   Info,
-  Smartphone,
   CheckCircle2,
   Calendar as CalendarIcon,
   HelpCircle
@@ -316,35 +315,6 @@ export const SettingsPanel = ({
                 </div>
               </div>
 
-              {/* Design Style: Modern or Cute */}
-              <div className="space-y-3">
-                <h4 className={`text-sm font-bold ${ui.textMain}`}>Gaya Desain Antarmuka</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setDesignStyle("modern")}
-                    className={`p-4 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-2 ${
-                      designStyle === "modern"
-                        ? 'border-[#6a8d73] bg-[#6a8d73]/10 text-[#6a8d73] font-bold ring-2 ring-[#6a8d73]/10'
-                        : `${isLight ? 'border-slate-200 bg-white text-slate-500' : 'border-slate-850 bg-slate-900/40 text-slate-400'} font-semibold`
-                    }`}
-                  >
-                    <span className="text-xs font-semibold">Gaya Modern</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDesignStyle("cute")}
-                    className={`p-4 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-2 ${
-                      designStyle === "cute"
-                        ? 'border-pink-400 bg-pink-500/10 text-pink-500 font-bold ring-2 ring-pink-500/10'
-                        : `${isLight ? 'border-slate-200 bg-white text-slate-500' : 'border-slate-850 bg-slate-900/40 text-slate-400'} font-semibold`
-                    }`}
-                  >
-                    <span className="text-xs font-semibold">Gaya Lucu</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Theme Color Palette Selector */}
               <div className="space-y-3">
                 <h4 className={`text-sm font-bold ${ui.textMain}`}>Pilihan Palet Warna</h4>
@@ -541,17 +511,7 @@ export const SettingsPanel = ({
                   </div>
                 </div>
 
-                <div className="border-t pt-4 border-slate-200/50 dark:border-slate-800">
-                  <div className="flex items-start gap-2.5 p-4 rounded-2xl bg-green-500/5 border border-green-500/10">
-                    <Smartphone className="w-5 h-5 text-[#128c7e] shrink-0" />
-                    <div>
-                      <p className={`text-xs font-bold text-green-600 dark:text-green-400`}>Tips Simulator Chat WA</p>
-                      <p className="text-[11px] text-slate-400 leading-normal mt-0.5">
-                        Anda bisa mencoba mengetik perintah seperti <code>!saldo</code>, <code>!bantuan</code>, atau <code>!summary</code> secara interaktif di panel simulator WhatsApp sebelah kanan dashboard utama setelah menyimpan konfigurasi!
-                      </p>
-                    </div>
-                  </div>
-                </div>
+
               </div>
             </div>
           )}

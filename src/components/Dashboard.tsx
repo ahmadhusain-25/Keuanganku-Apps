@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
 import { SettingsPanel } from "./SettingsPanel";
+import { FloatingAssistant } from "./FloatingAssistant";
 
 export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -104,6 +105,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
   // Router pagination state
   const [activePage, setActivePage] = useState<"dashboard" | "profile">("dashboard");
+
+  // Date Range Filter States
+  const [filterPreset, setFilterPreset] = useState<"all" | "today" | "7days" | "30days" | "thisMonth" | "custom">("all");
+  const [filterStartDate, setFilterStartDate] = useState<string>("");
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
 
   // Multi-Confirm and Toast Alerts state
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -237,11 +243,75 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   };
   const theme = themes[themeMode];
 
+  const getFilteredTransactions = () => {
+    if (filterPreset === "all") {
+      return transactions;
+    }
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return transactions.filter(t => {
+      if (!t.date) return false;
+      const parts = t.date.split('-');
+      if (parts.length !== 3) return false;
+      const tDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      tDate.setHours(0, 0, 0, 0);
+      
+      switch (filterPreset) {
+        case "today": {
+          const localTodayStr = today.getFullYear() + "-" + 
+            String(today.getMonth() + 1).padStart(2, '0') + "-" + 
+            String(today.getDate()).padStart(2, '0');
+          return t.date === localTodayStr;
+        }
+        case "7days": {
+          const sevenDaysAgo = new Date(today);
+          sevenDaysAgo.setDate(today.getDate() - 7);
+          return tDate >= sevenDaysAgo && tDate <= today;
+        }
+        case "30days": {
+          const thirtyDaysAgo = new Date(today);
+          thirtyDaysAgo.setDate(today.getDate() - 30);
+          return tDate >= thirtyDaysAgo && tDate <= today;
+        }
+        case "thisMonth": {
+          const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          return tDate >= firstDayOfMonth && tDate <= lastDayOfMonth;
+        }
+        case "custom": {
+          if (filterStartDate) {
+            const startParts = filterStartDate.split('-');
+            if (startParts.length === 3) {
+              const start = new Date(Number(startParts[0]), Number(startParts[1]) - 1, Number(startParts[2]));
+              start.setHours(0, 0, 0, 0);
+              if (tDate < start) return false;
+            }
+          }
+          if (filterEndDate) {
+            const endParts = filterEndDate.split('-');
+            if (endParts.length === 3) {
+              const end = new Date(Number(endParts[0]), Number(endParts[1]) - 1, Number(endParts[2]));
+              end.setHours(0, 0, 0, 0);
+              if (tDate > end) return false;
+            }
+          }
+          return true;
+        }
+        default:
+          return true;
+      }
+    });
+  };
+
+  const filteredTransactions = getFilteredTransactions();
+
   const handleExportCSV = () => {
-    if (transactions.length === 0) return showToast("Belum ada data transaksi untuk diexport.", "info");
+    if (filteredTransactions.length === 0) return showToast("Belum ada data transaksi untuk diexport.", "info");
     const csvRows = [];
     csvRows.push(['ID', 'Tanggal', 'Jenis', 'Kategori', 'Nominal', 'Keterangan'].join(','));
-    transactions.forEach(t => {
+    filteredTransactions.forEach(t => {
       csvRows.push([t.id, t.date, t.type, t.category, t.amount, `"${t.description.replace(/"/g, '""')}"`].join(','));
     });
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -251,16 +321,16 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     a.download = 'Keuanganku_Export.csv';
     a.click();
     URL.revokeObjectURL(url);
-    showToast("Data transaksi berhasil diexport ke CSV!", "success");
+    showToast("Data transaksi ekspor sesuai filter berhasil diunduh!", "success");
   };
 
   const handleGetAiSummary = async () => {
-    if (transactions.length === 0) return showToast("Belum ada transaksi untuk dianalisis.", "info");
+    if (filteredTransactions.length === 0) return showToast("Belum ada transaksi dalam rentang tanggal terpilih untuk dianalisis.", "info");
     setLoadingAi(true);
     try {
-      const res = await getAISummary(transactions);
+      const res = await getAISummary(filteredTransactions);
       setAiSummary(res.text);
-      showToast("Analisis AI berhasil diperbarui!", "success");
+      showToast("Analisis AI sesuai rentang tanggal berhasil diperbarui!", "success");
     } catch (e: any) {
       showToast("Gagal memuat analisis AI: " + e.message, "error");
     } finally {
@@ -635,13 +705,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   };
 
   // Math aggregates
-  const totalIncome = transactions.filter(t => t.type === "Income").reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0);
+  const totalIncome = filteredTransactions.filter(t => t.type === "Income").reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = filteredTransactions.filter(t => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0);
   const balance = totalIncome - totalExpense;
   const remainingBudget = monthlyBudget - totalExpense;
   const budgetPercent = monthlyBudget > 0 ? (totalExpense / monthlyBudget) * 100 : 0;
 
-  const expensesByCategory = transactions
+  const expensesByCategory = filteredTransactions
     .filter(t => t.type === "Expense")
     .reduce((acc, t) => {
       acc[t.category] = (acc[t.category] || 0) + t.amount;
@@ -1044,8 +1114,104 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     </div>
                   </div>
 
+                  {/* Date Filter Bar */}
+                  <div className="mb-4">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                      <span className={`text-[10px] font-bold ${ui.textMuted} uppercase mr-1`}>Rentang Waktu:</span>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("all")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "all"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        Semua
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("today")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "today"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("7days")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "7days"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        7 Hari
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("30days")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "30days"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        30 Hari
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("thisMonth")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "thisMonth"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        Bulan Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPreset("custom")}
+                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all border ${
+                          filterPreset === "custom"
+                            ? 'bg-[#6a8d73] text-white border-[#6a8d73]'
+                            : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200' : 'bg-[#18261e] hover:bg-[#1e3226] text-emerald-100 border-emerald-950'}`
+                        }`}
+                      >
+                        Kustom
+                      </button>
+                    </div>
+
+                    {filterPreset === "custom" && (
+                      <div className={`grid grid-cols-2 gap-3 p-3 rounded-2xl border ${isLight ? 'bg-slate-50/70 border-slate-200/55' : 'bg-[#18261e]/40 border-emerald-950/40'} animate-fadeIn mb-1`}>
+                        <div>
+                          <label className={`block text-[9px] font-bold ${ui.textMuted} mb-1 uppercase tracking-wide`}>Mulai Tanggal</label>
+                          <input
+                            type="date"
+                            value={filterStartDate}
+                            onChange={(e) => setFilterStartDate(e.target.value)}
+                            className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:ring-2 ${theme.focus}`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[9px] font-bold ${ui.textMuted} mb-1 uppercase tracking-wide`}>Sampai Tanggal</label>
+                          <input
+                            type="date"
+                            value={filterEndDate}
+                            onChange={(e) => setFilterEndDate(e.target.value)}
+                            className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-2.5 py-1.5 text-[11px] font-semibold outline-none focus:ring-2 ${theme.focus}`}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="space-y-3.5 flex-1 max-h-[460px] overflow-y-auto scrollbar-thin">
-                    {transactions.slice().reverse().map((t, idx) => (
+                    {filteredTransactions.slice().reverse().map((t, idx) => (
                       <div 
                         key={t.id || idx} 
                         className={`flex items-center gap-3.5 ${isLight ? 'hover:bg-slate-50/70 border-slate-100' : 'hover:bg-white/2 border-white/2'} p-2 rounded-2xl border transition-colors group relative`}
@@ -1087,6 +1253,12 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     
                     {transactions.length === 0 && !loading && (
                       <div className={`text-center py-10 ${ui.textMuted} text-xs font-semibold`}>Belum ada riwayat transaksi terinput.</div>
+                    )}
+
+                    {transactions.length > 0 && filteredTransactions.length === 0 && !loading && (
+                      <div className={`text-center py-10 ${ui.textMuted} text-xs font-semibold`}>
+                        Tidak ada catatan keuangan pada periode ini.
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1283,6 +1455,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           </div>
         </div>
       )}
+
+      {/* Floating Repositionable Owi AI Assistant */}
+      <FloatingAssistant 
+        transactions={transactions} 
+        themeMode={colorMode} 
+        isGuest={!!user?.isGuest}
+      />
     </div>
   );
 };

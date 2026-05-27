@@ -175,3 +175,21 @@ export const resetTransactions = async (spreadsheetId: string) => {
   if (!res.ok) throw new Error("Failed to reset transactions");
   return res.json();
 };
+
+export const sendAIChatMessage = async (
+  message: string,
+  history: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>,
+  transactions: Transaction[]
+) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/ai/chat"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ message, history, transactions })
+  });
+  if (!res.ok) throw new Error("Failed to get response from Owi AI Chat");
+  return res.json();
+};

@@ -48,7 +48,14 @@ export const Login = ({
         style={{ borderColor: colors.primary }}
       >
         <CardHeader className="space-y-3 text-center pb-2 pt-6">
-          <AppLogo size={105} showText={true} vertical={true} className="py-2" />
+          <AppLogo 
+            size={105} 
+            showText={true} 
+            vertical={true} 
+            className="py-2" 
+            titleClassName="text-[#6a8d73] dark:text-[#a3e635]" 
+            subtitleClassName="text-[#6a8d73]/80 dark:text-[#a3e635]/80 font-bold"
+          />
         </CardHeader>
 
         <CardContent className="space-y-5">
