@@ -261,13 +261,60 @@ async function startServer() {
     }
   });
 
-  app.post("/api/whatsapp/notify", (req, res) => {
-    // Scaffold for real WA API hook.
-    // For now we simulate success and return a wa.me link that opens the local client
-    const { phone, message } = req.body;
-    const cleanPhone = phone.replace(/[^0-9]/g, "");
-    const link = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-    res.json({ success: true, waLink: link, simulated: true });
+  app.post("/api/whatsapp/notify", async (req, res) => {
+    try {
+      const { phone, message } = req.body;
+      if (!phone || !message) {
+        return res.status(400).json({ error: "Phone number and message are required." });
+      }
+
+      // Fonnte API Key provided by user (with support for environment override)
+      const fonnteToken = process.env.FONNTE_API_KEY || "o2ibg27orvbi75tc4fDi";
+
+      const params = new URLSearchParams();
+      params.append("target", phone);
+      params.append("message", message);
+      params.append("countryCode", "62"); // default handling for Indonesian local format (starts with 0)
+
+      console.log(`[Fonnte Bot] Sending WA message to ${phone}...`);
+      
+      const response = await fetch("https://api.fonnte.com/send", {
+        method: "POST",
+        headers: {
+          "Authorization": fonnteToken
+        },
+        body: params
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText };
+      }
+
+      if (response.ok) {
+        console.log(`[Fonnte Bot] Sent successfully:`, responseData);
+        const cleanPhone = phone.replace(/[^0-9]/g, "");
+        const link = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        res.json({ 
+          success: true, 
+          waLink: link, 
+          fonnteResponse: responseData 
+        });
+      } else {
+        console.error(`[Fonnte Bot] API returned error status ${response.status}:`, responseData);
+        res.status(response.status).json({ 
+          success: false, 
+          error: "Fonnte API error status", 
+          details: responseData 
+        });
+      }
+    } catch (e: any) {
+      console.error("[Fonnte Bot] Internal Server Error:", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   // Drive Spreadsheet Picker Endpoint

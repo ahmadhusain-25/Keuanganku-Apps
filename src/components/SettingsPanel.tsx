@@ -299,7 +299,7 @@ export const SettingsPanel = ({
                     }`}
                   >
                     <Sun className={`w-5 h-5 ${isLight ? 'text-[#6a8d73]' : 'text-slate-400'}`} />
-                    <span className="text-xs">🌞 Mode Terang (Cream Yellow)</span>
+                    <span className="text-xs font-semibold">Mode Terang</span>
                   </button>
                   <button
                     type="button"
@@ -311,7 +311,7 @@ export const SettingsPanel = ({
                     }`}
                   >
                     <Moon className={`w-5 h-5 ${!isLight ? 'text-[#6a8d73]' : 'text-slate-400'}`} />
-                    <span className="text-xs">🌙 Mode Gelap (Forest Ink)</span>
+                    <span className="text-xs font-semibold">Mode Gelap</span>
                   </button>
                 </div>
               </div>
@@ -329,8 +329,7 @@ export const SettingsPanel = ({
                         : `${isLight ? 'border-slate-200 bg-white text-slate-500' : 'border-slate-850 bg-slate-900/40 text-slate-400'} font-semibold`
                     }`}
                   >
-                    <span className="text-base">📐</span>
-                    <span className="text-xs font-semibold">Gaya Modern (Sleek & Clean)</span>
+                    <span className="text-xs font-semibold">Gaya Modern</span>
                   </button>
                   <button
                     type="button"
@@ -341,8 +340,7 @@ export const SettingsPanel = ({
                         : `${isLight ? 'border-slate-200 bg-white text-slate-500' : 'border-slate-850 bg-slate-900/40 text-slate-400'} font-semibold`
                     }`}
                   >
-                    <span className="text-base">🌸</span>
-                    <span className="text-xs font-semibold">Gaya Lucu (Soft & Rounded)</span>
+                    <span className="text-xs font-semibold">Gaya Lucu</span>
                   </button>
                 </div>
               </div>
@@ -463,33 +461,7 @@ export const SettingsPanel = ({
                 )}
               </div>
 
-              {/* Google Apps Script Module */}
-              <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-4 transition-all duration-500`}>
-                <div className="flex items-center gap-3 border-b pb-3 border-slate-200/50 dark:border-slate-800">
-                  <div className="p-2 bg-slate-500/10 text-slate-400 rounded-lg">
-                    <Terminal className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className={`text-sm font-bold ${ui.textMain}`}>Google Apps Script WA Bot</h4>
-                    <p className="text-[10px] text-slate-400">Gunakan script ini untuk mengaktifkan bot WhatsApp Anda 24 jam gratis!</p>
-                  </div>
-                </div>
 
-                <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
-                  Gunakan Google Apps Script gratis bawaan Google untuk menghubungkan chatbot WhatsApp Anda. Salin script di bawah, tempel di panel Apps Script Spreadsheet, dan publikasikan sebagai Web App.
-                </p>
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    type="button"
-                    onClick={handleCopyAppsScript}
-                    className={`flex items-center justify-center gap-2 text-xs font-bold text-white ${theme.bgIcon} px-4 py-2 rounded-xl transition-all hover:bg-opacity-90 active:scale-95`}
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    {copiedScript ? "Script Berhasil Disalin!" : "Salin Script Lengkap (Apps Script)"}
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 

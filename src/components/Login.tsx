@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader } from "./ui/card";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { AlertCircle, Chrome, ShieldAlert, ArrowRightLeft, UserCheck } from "lucide-react";
+import { AppLogo } from "./AppLogo";
 
 export const Login = ({ 
   onLogin, 
@@ -46,35 +47,8 @@ export const Login = ({
         className="w-full max-w-md shadow-2xl border-2 bg-white/95 backdrop-blur-md rounded-3xl transition-transform duration-300 hover:scale-[1.01]" 
         style={{ borderColor: colors.primary }}
       >
-        <CardHeader className="space-y-3 text-center pb-1">
-          <div className="flex justify-center mb-2">
-            <img 
-              src="/logo.png" 
-              alt="Kuanganku Logo" 
-              className="h-24 md:h-28 object-contain transition-transform hover:scale-105 duration-300"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-                const fallback = document.createElement('div');
-                fallback.className = 'p-4 rounded-3xl flex items-center justify-center shadow-lg';
-                fallback.style.backgroundColor = colors.primary;
-                fallback.style.color = 'white';
-                fallback.innerHTML = `
-                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/>
-                    <path d="M12 18V6"/>
-                  </svg>
-                `;
-                e.currentTarget.parentNode?.appendChild(fallback);
-              }}
-            />
-          </div>
-          <div className="space-y-1">
-            <CardTitle className="text-3xl font-extrabold tracking-tight" style={{ color: colors.primary }}>
-              Kuanganku
-            </CardTitle>
-            <CardDescription className="text-zinc-600 font-medium">Catatan Keuangan Pintar</CardDescription>
-          </div>
+        <CardHeader className="space-y-3 text-center pb-2 pt-6">
+          <AppLogo size={105} showText={true} vertical={true} className="py-2" />
         </CardHeader>
 
         <CardContent className="space-y-5">

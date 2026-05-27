@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { AppLogo } from "./AppLogo";
 import { 
   fetchFinances, 
   addTransaction, 
@@ -438,6 +439,14 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
       }]);
       setBotIsTyping(false);
+
+      if (waBotEnabled && phone) {
+        try {
+          await sendWANotification(phone, responseText);
+        } catch (waErr) {
+          console.error("Fonnte Real WA push error:", waErr);
+        }
+      }
     }, 1000);
   };
 
@@ -507,6 +516,14 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               text: textBudget,
               timestamp: timeStr
             }]);
+
+            if (phone) {
+              try {
+                await sendWANotification(phone, textBudget);
+              } catch (waBudgetErr) {
+                console.error("Simulation notify budget limit error: ", waBudgetErr);
+              }
+            }
           }
         }
       }
@@ -665,27 +682,17 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             onClick={() => setActivePage("dashboard")}
             title="Ke Dashboard"
           >
-            <div className="w-10 h-10 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 rounded-xl bg-white/60 p-1 border">
-              <img 
-                src="/logo.png" 
-                alt="Logo Kuanganku" 
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const fb = e.currentTarget.nextElementSibling;
-                  if (fb) fb.classList.remove('hidden');
-                }}
-              />
-              <div className="hidden w-8 h-8 rounded-full bg-[#6a8d73] flex items-center justify-center text-white text-[10px] font-bold">K</div>
-            </div>
-            <div>
-              <h1 className={`text-lg font-bold ${ui.textMain} tracking-tight flex items-center gap-1.5`}>
-                Kuanganku
-                <span className="text-[10px] bg-[#6a8d73]/15 text-[#6a8d73] px-2 py-0.5 rounded-full font-bold">v2.1</span>
-              </h1>
-              <p className={`text-[10px] ${ui.textMuted} font-mono mt-0.5`}>
+            <AppLogo 
+              size={38} 
+              showText={true} 
+              titleClassName={ui.textMain}
+              subtitleClassName={ui.textMuted}
+            />
+            <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] h-4 mt-0.5 border-l pl-3 border-slate-200 dark:border-slate-800">
+              <span className="text-[10px] bg-[#6a8d73]/15 text-[#6a8d73] px-2 py-0.5 rounded-full font-bold">v2.1</span>
+              <span className={`${ui.textMuted} font-bold ml-1`}>
                 {customName || user?.displayName || "Tamu Keuanganku"}
-              </p>
+              </span>
             </div>
           </div>
 
@@ -904,8 +911,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                           onChange={e => setType(e.target.value as "Income" | "Expense")}
                           className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
                         >
-                          <option value="Expense" className={ui.selectOption}>Pengeluaran (Expense) 🔴</option>
-                          <option value="Income" className={ui.selectOption}>Pemasukan (Income) 🟢</option>
+                          <option value="Expense" className={ui.selectOption}>Pengeluaran</option>
+                          <option value="Income" className={ui.selectOption}>Pemasukan</option>
                         </select>
                       </div>
                       <div>
@@ -1215,119 +1222,6 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                       Buat Google Calendar Event
                     </button>
                   </form>
-                </div>
-
-                {/* Smartphone simulation for robot chat WA UI */}
-                <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 shadow-xl transition-all duration-500 overflow-hidden`}>
-                  <div className="flex items-center justify-between mb-4 border-b pb-2.5 border-slate-200/50 dark:border-slate-800">
-                    <div className="flex items-center gap-2">
-                      <span className="p-1.5 rounded-lg bg-green-500/10 text-green-500 shrink-0">
-                        <MessageSquare className="w-4 h-4 animate-pulse" />
-                      </span>
-                      <div>
-                        <h3 className={`text-xs font-bold ${ui.textMain} leading-tight`}>
-                          Bot Whatsapp "Keuanganku"
-                        </h3>
-                        <p className="text-[9px] text-green-500 font-bold flex items-center gap-1 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block"></span>
-                          Online & Automated
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-[9px] px-2 py-0.5 font-bold rounded-full ${waBotEnabled ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/20' : 'bg-slate-500/15 text-slate-400 border border-slate-500/10'}`}>
-                      {waBotEnabled ? "AKTIF" : "OFF"}
-                    </span>
-                  </div>
-
-                  {/* Robot Simulator Phone screen mockup */}
-                  <div className="border border-slate-250 dark:border-slate-850 rounded-3xl overflow-hidden bg-slate-900 shadow-md">
-                    <div className="bg-[#075e54] text-white p-2.5 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-[#075e54] font-bold text-xs">
-                          🤖
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-bold leading-none">Keuanganku Bot</h4>
-                          <p className="text-[8px] text-emerald-200 flex items-center gap-0.5 mt-0.5">
-                            <span className="w-1 h-1 rounded-full bg-emerald-300 animate-pulse"></span> aktif
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[8px] bg-white/10 px-2 py-0.5 rounded-full font-mono text-emerald-100 uppercase font-black tracking-wider">SIMULATOR WA</span>
-                    </div>
-
-                    {/* Wallpaper chat messages list view */}
-                    <div 
-                      className="p-3 h-52 overflow-y-auto bg-slate-950 flex flex-col space-y-2 scrollbar-none"
-                      style={{
-                        backgroundImage: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')",
-                        backgroundSize: "cover",
-                      }}
-                    >
-                      {chatMessages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`max-w-[85%] rounded-2xl p-2 px-2.5 text-[10px] shadow-xs leading-normal ${
-                            msg.sender === "bot"
-                              ? "bg-white text-slate-900 self-start rounded-tl-none border border-slate-200"
-                              : "bg-[#dcf8c6] text-slate-900 self-end rounded-tr-none border border-green-200"
-                          }`}
-                        >
-                          <div className="whitespace-pre-wrap text-[10px] leading-relaxed">
-                            {msg.text.split("\n").map((line: string, lineIndex: number) => {
-                              const textParts = line.split(/(\*[^*]+\*)/g);
-                              return (
-                                <p key={lineIndex} className="mb-0.5">
-                                  {textParts.map((part: string, idx: number) => {
-                                    if (part.startsWith("*") && part.endsWith("*")) {
-                                      return <strong key={idx} className="font-bold text-emerald-850">{part.slice(1, -1)}</strong>;
-                                    }
-                                    return part;
-                                  })}
-                                </p>
-                              );
-                            })}
-                          </div>
-                          <span className="text-[7px] opacity-60 font-mono block text-right mt-1">{msg.timestamp}</span>
-                        </div>
-                      ))}
-
-                      {botIsTyping && (
-                        <div className="bg-white text-slate-950 self-start rounded-2xl rounded-tl-none p-2 px-2.5 text-[9px] shadow-sm flex items-center gap-1.5 border border-slate-200">
-                          <span className="text-[9px] text-slate-500 animate-pulse font-bold">Keuanganku Bot mengetik</span>
-                          <span className="flex gap-0.5">
-                            <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce"></span>
-                            <span className="w-1 h-1 bg-slate-400 rounded-full animate-bounce delay-100"></span>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Type in simulator mockup keyboard */}
-                    <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (chatInput.trim()) {
-                          handleSendChatMessage(chatInput);
-                        }
-                      }} 
-                      className="p-1.5 border-t border-slate-800 bg-slate-900 flex gap-1 focus-within:ring-1 focus-within:ring-emerald-600"
-                    >
-                      <input
-                        type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        placeholder="Ketik: !saldo atau !bantuan"
-                        className="flex-1 bg-slate-950 text-white rounded-full px-3 py-1 text-[9px] font-bold outline-none border border-slate-800 placeholder:text-slate-500"
-                      />
-                      <button
-                        type="submit"
-                        className="w-6.5 h-6.5 rounded-full bg-[#128c7e] text-white flex items-center justify-center active:scale-95 transition-transform"
-                      >
-                        <Send className="w-2.5 h-2.5" />
-                      </button>
-                    </form>
-                  </div>
                 </div>
 
               </div>
