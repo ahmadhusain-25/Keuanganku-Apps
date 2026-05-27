@@ -95,7 +95,12 @@ export const googleSignInRedirect = async (): Promise<void> => {
 
 export const getAccessToken = async (): Promise<string | null> => {
   if (!cachedAccessToken) {
-    cachedAccessToken = localStorage.getItem("googleAccessToken");
+    const stored = localStorage.getItem("googleAccessToken");
+    if (stored === "null" || stored === "undefined" || !stored) {
+      cachedAccessToken = null;
+    } else {
+      cachedAccessToken = stored;
+    }
   }
   return cachedAccessToken;
 };

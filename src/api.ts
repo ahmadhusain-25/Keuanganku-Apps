@@ -29,6 +29,38 @@ const getApiUrl = (path: string): string => {
   return path;
 };
 
+const handleResponse = async (res: Response, defaultMessage: string) => {
+  if (!res.ok) {
+    let errorMessage = defaultMessage;
+    let isAuthError = false;
+    try {
+      const errorData = await res.json();
+      if (errorData?.error) {
+        errorMessage = errorData.error;
+      }
+    } catch (_) {}
+
+    const lowerError = errorMessage.toLowerCase();
+    if (
+      res.status === 401 ||
+      lowerError.includes("access token") ||
+      lowerError.includes("invalid authentication credentials") ||
+      lowerError.includes("auth") ||
+      lowerError.includes("credential") ||
+      lowerError.includes("unauthorized") ||
+      lowerError.includes("gaxioserror")
+    ) {
+      isAuthError = true;
+    }
+
+    if (isAuthError) {
+      throw new Error("UNAUTHORIZED_SESSION_EXPIRED");
+    }
+    throw new Error(errorMessage);
+  }
+  return res.json();
+};
+
 export const fetchFinances = async (spreadsheetId?: string | null) => {
   const token = await getAccessToken();
   const url = spreadsheetId && spreadsheetId !== "guest-spreadsheet" 
@@ -37,8 +69,7 @@ export const fetchFinances = async (spreadsheetId?: string | null) => {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to fetch finances");
-  return res.json();
+  return handleResponse(res, "Failed to fetch finances");
 };
 
 export const fetchUserSpreadsheets = async () => {
@@ -46,8 +77,7 @@ export const fetchUserSpreadsheets = async () => {
   const res = await fetch(getApiUrl("/api/drive/spreadsheets"), {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to fetch spreadsheets from Google Drive");
-  return res.json();
+  return handleResponse(res, "Failed to fetch spreadsheets from Google Drive");
 };
 
 export const scanGmailInvoices = async () => {
@@ -55,8 +85,7 @@ export const scanGmailInvoices = async () => {
   const res = await fetch(getApiUrl("/api/gmail/scan"), {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to scan emails");
-  return res.json();
+  return handleResponse(res, "Failed to scan emails");
 };
 
 export const sendEmailReport = async (to: string, subject: string, htmlBody: string) => {
@@ -69,8 +98,7 @@ export const sendEmailReport = async (to: string, subject: string, htmlBody: str
     },
     body: JSON.stringify({ to, subject, htmlBody })
   });
-  if (!res.ok) throw new Error("Failed to send email");
-  return res.json();
+  return handleResponse(res, "Failed to send email");
 };
 
 export const fetchChatSpaces = async () => {
@@ -78,8 +106,7 @@ export const fetchChatSpaces = async () => {
   const res = await fetch(getApiUrl("/api/chat/spaces"), {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to fetch Chat spaces");
-  return res.json();
+  return handleResponse(res, "Failed to fetch Chat spaces");
 };
 
 export const sendChatMessage = async (spaceId: string, text: string, card?: any) => {
@@ -92,8 +119,7 @@ export const sendChatMessage = async (spaceId: string, text: string, card?: any)
     },
     body: JSON.stringify({ spaceId, text, card })
   });
-  if (!res.ok) throw new Error("Failed to send message to Google Chat");
-  return res.json();
+  return handleResponse(res, "Failed to send message to Google Chat");
 };
 
 export const addTransaction = async (data: Omit<Transaction, "id"> & { spreadsheetId: string }) => {
@@ -106,8 +132,7 @@ export const addTransaction = async (data: Omit<Transaction, "id"> & { spreadshe
     },
     body: JSON.stringify(data)
   });
-  if (!res.ok) throw new Error("Failed to add transaction");
-  return res.json();
+  return handleResponse(res, "Failed to add transaction");
 };
 
 export const addCalendarReminder = async (summary: string, description: string, dateStr: string) => {
@@ -124,8 +149,7 @@ export const addCalendarReminder = async (summary: string, description: string, 
     },
     body: JSON.stringify({ summary, description, startDateTime, endDateTime })
   });
-  if (!res.ok) throw new Error("Failed to add reminder");
-  return res.json();
+  return handleResponse(res, "Failed to add reminder");
 };
 
 export const sendWANotification = async (phone: string, message: string) => {
@@ -138,8 +162,7 @@ export const sendWANotification = async (phone: string, message: string) => {
     },
     body: JSON.stringify({ phone, message })
   });
-  if (!res.ok) throw new Error("Failed to prepare WA notification");
-  return res.json();
+  return handleResponse(res, "Failed to prepare WA notification");
 };
 
 export const getAISummary = async (transactions: Transaction[]) => {
@@ -152,8 +175,7 @@ export const getAISummary = async (transactions: Transaction[]) => {
     },
     body: JSON.stringify({ transactions })
   });
-  if (!res.ok) throw new Error("Failed to get AI summary");
-  return res.json();
+  return handleResponse(res, "Failed to get AI summary");
 };
 
 export const deleteTransaction = async (id: string, spreadsheetId: string) => {
@@ -162,8 +184,7 @@ export const deleteTransaction = async (id: string, spreadsheetId: string) => {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to delete transaction");
-  return res.json();
+  return handleResponse(res, "Failed to delete transaction");
 };
 
 export const resetTransactions = async (spreadsheetId: string) => {
@@ -172,8 +193,7 @@ export const resetTransactions = async (spreadsheetId: string) => {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Failed to reset transactions");
-  return res.json();
+  return handleResponse(res, "Failed to reset transactions");
 };
 
 export const sendAIChatMessage = async (
@@ -190,6 +210,5 @@ export const sendAIChatMessage = async (
     },
     body: JSON.stringify({ message, history, transactions })
   });
-  if (!res.ok) throw new Error("Failed to get response from Owi AI Chat");
-  return res.json();
+  return handleResponse(res, "Failed to get response from Owi AI Chat");
 };

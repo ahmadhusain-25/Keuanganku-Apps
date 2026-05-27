@@ -48,12 +48,14 @@ import {
 import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
 import { SettingsPanel } from "./SettingsPanel";
 import { FloatingAssistant } from "./FloatingAssistant";
+import { googleSignIn } from "../auth";
 
 export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isReauthing, setIsReauthing] = useState(false);
 
   // Storage / GDrive Spreadsheet listing
   const [spreadsheetsList, setSpreadsheetsList] = useState<any[]>([]);
@@ -346,8 +348,28 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       setSpreadsheetsList(res.files || []);
     } catch (e: any) {
       console.error("Gagal mengambil daftar spreadsheet:", e);
+      if (e.message === "UNAUTHORIZED_SESSION_EXPIRED") {
+        setError("UNAUTHORIZED_SESSION_EXPIRED");
+      }
     } finally {
       setLoadingSpreadsheets(false);
+    }
+  };
+
+  const handleReauthGoogle = async () => {
+    setIsReauthing(true);
+    try {
+      const res = await googleSignIn();
+      if (res?.accessToken) {
+        showToast("Berhasil menyambungkan kembali akun Google Anda!", "success");
+        setError("");
+        await loadData();
+        await loadSpreadsheetsList();
+      }
+    } catch (err: any) {
+      showToast("Gagal menyambungkan kembali: " + err.message, "error");
+    } finally {
+      setIsReauthing(false);
     }
   };
 
@@ -811,10 +833,49 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-6 space-y-6">
         {/* Error bar alert box */}
         {error && (
-          <div className="bg-red-500/10 text-red-500 p-4 rounded-3xl text-xs mb-4 border border-red-500/20 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="font-semibold">{error}</span>
-          </div>
+          error === "UNAUTHORIZED_SESSION_EXPIRED" ? (
+            <div className={`p-6 rounded-3xl border mb-6 ${
+              isLight 
+                ? "bg-amber-500/5 border-amber-500/20 text-slate-800" 
+                : "bg-[#251d10] border-amber-500/15 text-slate-200"
+            } flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm`}>
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500 shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <h4 className="font-black text-sm tracking-wide text-amber-500 flex items-center gap-2">
+                    Sesi Google Workspace Terputus
+                  </h4>
+                  <p className={`text-xs ${isLight ? "text-slate-600" : "text-slate-400"} leading-relaxed max-w-2xl`}>
+                    Akses Google Sheets & Drive Anda telah berakhir setelah beberapa waktu (OAuth Token Expired). Silakan klik tombol di samping untuk menyambungkan kembali akun Google Anda dengan aman agar transaksi dapat tersinkronisasi kembali secara real-time!
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleReauthGoogle}
+                disabled={isReauthing}
+                className={`py-2.5 px-5 rounded-2xl ${theme.bgIcon} text-white font-bold text-xs hover:opacity-95 active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 shrink-0 disabled:opacity-50`}
+              >
+                {isReauthing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menghubungkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Hubungkan Ulang</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="bg-red-500/10 text-red-500 p-4 rounded-3xl text-xs mb-4 border border-red-500/20 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="font-semibold">{error}</span>
+            </div>
+          )
         )}
 
         {/* Paginated Switch router views */}

@@ -17,6 +17,28 @@ function getAuthClient(authHeader: string | undefined) {
   return auth;
 }
 
+function handleGoogleError(res: express.Response, e: any, contextMsg: string) {
+  console.error(`${contextMsg}:`, e);
+  const isAuthError = 
+    e.status === 401 || 
+    e.code === 401 || 
+    e.response?.status === 401 ||
+    e.message?.toLowerCase().includes("invalid authentication credentials") ||
+    e.message?.toLowerCase().includes("invalid credentials") ||
+    e.message?.toLowerCase().includes("expected oauth 2 access token") ||
+    e.message?.toLowerCase().includes("unauthorized") ||
+    e.message?.toLowerCase().includes("auth");
+
+  if (isAuthError) {
+    return res.status(401).json({ 
+      error: "Sesi Google Anda telah kedaluwarsa. Silakan lakukan hubungkan kembali (reconnect) akun Anda.", 
+      code: "GOOGLE_AUTH_ERROR",
+      details: e.message 
+    });
+  }
+  return res.status(500).json({ error: e.message });
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -131,8 +153,7 @@ async function startServer() {
 
       res.json({ spreadsheetId: fileId, transactions });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error fetching finances database");
     }
   });
 
@@ -155,8 +176,7 @@ async function startServer() {
 
       res.json({ success: true, id });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error adding transaction");
     }
   });
 
@@ -182,8 +202,7 @@ async function startServer() {
       }
       res.json({ success: true });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error clearing finance transactions");
     }
   });
 
@@ -230,8 +249,7 @@ async function startServer() {
 
       res.json({ success: true });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error deleting trade transaction");
     }
   });
 
@@ -256,8 +274,7 @@ async function startServer() {
 
       res.json({ success: true, eventLink: resCalendar.data.htmlLink });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error creating calendar reminder");
     }
   });
 
@@ -330,8 +347,7 @@ async function startServer() {
       });
       res.json({ files: filesRes.data.files || [] });
     } catch (e: any) {
-      console.error("Error fetching spreadsheets from GDrive:", e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Error fetching spreadsheets from GDrive");
     }
   });
 
@@ -411,8 +427,7 @@ async function startServer() {
 
       res.json({ scanned: scannedTransactions });
     } catch (e: any) {
-      console.error("Gmail scanner fatal error:", e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Gmail scanner fatal error");
     }
   });
 
@@ -454,8 +469,7 @@ async function startServer() {
 
       res.json({ success: true });
     } catch (e: any) {
-      console.error("Gmail send error:", e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Gmail send error");
     }
   });
 
@@ -469,8 +483,7 @@ async function startServer() {
       });
       res.json({ spaces: spacesRes.data.spaces || [] });
     } catch (e: any) {
-      console.error("Chat spaces fetching error:", e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Chat spaces fetching error");
     }
   });
 
@@ -496,8 +509,7 @@ async function startServer() {
 
       res.json({ success: true, messageId: postRes.data.name });
     } catch (e: any) {
-      console.error("Chat message creation error:", e);
-      res.status(500).json({ error: e.message });
+      handleGoogleError(res, e, "Chat message creation error");
     }
   });
 

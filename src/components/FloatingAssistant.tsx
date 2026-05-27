@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, Send, Sparkles, MessageCircle, RotateCcw, AlertTriangle } from "lucide-react";
 import { sendAIChatMessage, Transaction } from "../api";
+import { OwiLogo } from "./OwiLogo";
 
 interface ChatMessage {
   role: "user" | "model";
@@ -27,6 +28,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +42,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
 
   // Load chat history from localStorage on mount
   useEffect(() => {
+    setIsMobile(window.innerWidth < 768);
     const saved = localStorage.getItem("owi_assistant_chat");
     if (saved) {
       try {
@@ -58,12 +61,13 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     }
 
     // Set initial position on the bottom right of current window
-    const initialX = window.innerWidth - 100;
-    const initialY = window.innerHeight - 150;
+    const initialX = window.innerWidth - (window.innerWidth < 768 ? 80 : 100);
+    const initialY = window.innerHeight - (window.innerWidth < 768 ? 120 : 150);
     setPosition({ x: initialX, y: initialY });
 
     // Handle window resize
     const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
       setPosition((prev) => {
         const nextX = Math.max(10, Math.min(window.innerWidth - 85, prev.x));
         const nextY = Math.max(10, Math.min(window.innerHeight - 85, prev.y));
@@ -230,14 +234,15 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
         top: `${position.y}px`,
         zIndex: 9999
       }}
-      className="select-none active:scale-95 transition-transform duration-150"
+      className="select-none"
     >
       {/* Floating Animated Owl Bubble Button */}
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        className={`w-18 h-18 rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible ${
+        onPointerCancel={handlePointerUp}
+        className={`${isOpen ? "w-14 h-14" : "w-18 h-18"} rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible touch-none active:scale-95 duration-150 ${
           isDragging ? "scale-105 cursor-grabbing opacity-90" : "hover:scale-105 duration-300 pointer-events-auto"
         }`}
         style={{
@@ -248,15 +253,13 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
         }}
       >
         {/* Glow Ring Effects */}
-        <div className={`absolute inset-[-4px] rounded-full -z-10 animate-ping opacity-25 ${isDarkObj ? "bg-emerald-400" : "bg-[#6a8d73]"} ${isDragging ? "hidden" : ""}`} />
+        <div className={`absolute inset-[-4px] rounded-full -z-10 animate-ping opacity-25 ${isDarkObj ? "bg-emerald-400" : "bg-[#6a8d73]"} ${isDragging || isOpen ? "hidden" : ""}`} />
         <div className="absolute inset-0 rounded-full bg-transparent border-2 border-dashed border-emerald-400/20 group-hover:rotate-180 transition-transform duration-[6000ms] " />
 
         {/* Mascot Photo/Image */}
-        <img
-          src="/logo.png"
-          alt="Owi Assistant"
-          referrerPolicy="no-referrer"
-          className="w-14 h-14 object-contain select-none pointer-events-none transform transition-transform group-hover:scale-110 group-hover:-rotate-3 duration-300 animate-bobbing"
+        <OwiLogo
+          size={isOpen ? 44 : 56}
+          className="transform transition-transform group-hover:scale-110 group-hover:-rotate-3 duration-300 animate-bobbing"
         />
 
         {/* Floating Bubble Badge for New Response alerts */}
@@ -278,13 +281,24 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
       {isOpen && (
         <div
           data-testid="owi-chat-dialog"
-          className={`chat-dialog absolute rounded-3xl shadow-3xl flex flex-col overflow-hidden w-[360px] max-w-[calc(100vw-32px)] h-[460px] border transition-all animate-fadeIn ${
+          className={`chat-dialog ${isMobile ? "fixed" : "absolute"} rounded-3xl shadow-3xl flex flex-col overflow-hidden max-w-[calc(100vw-32px)] border transition-all animate-fadeIn ${
             isDarkObj 
               ? "bg-[#121c17] text-white border-emerald-950/60" 
               : "bg-white text-slate-800 border-slate-200"
           }`}
-          style={{
-            // Smart layout orientation helper: floats left or right depending on quadrant to maximize screen efficiency
+          style={isMobile ? {
+            position: "fixed" as const,
+            left: "16px",
+            right: "16px",
+            bottom: "80px",
+            width: "auto",
+            height: "calc(100vh - 120px)",
+            maxHeight: "480px",
+            top: "auto",
+            zIndex: 10000
+          } : {
+            width: "360px",
+            height: "460px",
             left: position.x > window.innerWidth / 2 ? "-372px" : "84px",
             top: position.y > window.innerHeight / 2 ? "-380px" : "0px",
           }}
@@ -300,8 +314,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             }}
           >
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center p-0.5 relative">
-                <img src="/logo.png" className="w-[26px] h-[26px] object-contain select-none" alt="Owi" />
+              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center relative">
+                <OwiLogo size={28} />
                 <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-green-500 border border-white" />
               </div>
               <div>
@@ -355,8 +369,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
               >
                 {/* Profile Avatars inside chat bubbles */}
                 {m.role === "model" && (
-                  <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center p-0.5 select-none">
-                    <img src="/logo.png" className="w-[18px] h-[18px] object-contain" alt="Owi" />
+                  <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center select-none">
+                    <OwiLogo size={20} />
                   </div>
                 )}
 
@@ -388,8 +402,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             {/* AI Thinking typing indicator */}
             {isLoading && (
               <div className="flex gap-2.5 max-w-[85%] mr-auto items-start">
-                <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center p-0.5 animate-pulse">
-                  <img src="/logo.png" className="w-[18px] h-[18px] object-contain" alt="Owi" />
+                <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center animate-pulse">
+                  <OwiLogo size={20} />
                 </div>
                 <div className={`px-3 py-2.5 rounded-2xl shadow-sm rounded-tl-none flex items-center gap-1.5 ${
                   isDarkObj ? "bg-[#18261e] border border-[#203628]/60" : "bg-white border border-slate-200/80"
