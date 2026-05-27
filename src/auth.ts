@@ -110,3 +110,8 @@ export const logout = async () => {
   cachedAccessToken = null;
   localStorage.removeItem("googleAccessToken");
 };
+
+export const clearAccessToken = () => {
+  cachedAccessToken = null;
+  localStorage.removeItem("googleAccessToken");
+};

@@ -9,20 +9,27 @@ const PORT = 3000;
 // Set up Google Drive, Sheets, Calendar wrappers
 function getAuthClient(authHeader: string | undefined) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw new Error("Missing or invalid Authorization header");
+    const err: any = new Error("Missing or invalid Authorization header");
+    err.status = 401;
+    throw err;
   }
   const token = authHeader.split(" ")[1];
+  if (!token || token === "null" || token === "undefined" || token.trim() === "") {
+    const err: any = new Error("Invalid or empty Google OAuth access token");
+    err.status = 401;
+    throw err;
+  }
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: token });
   return auth;
 }
 
 function handleGoogleError(res: express.Response, e: any, contextMsg: string) {
-  console.error(`${contextMsg}:`, e);
+  const status = e.status || e.code || e.response?.status || 500;
+  console.error(`${contextMsg}: [Status ${status}] ${e.message || e}`);
+  
   const isAuthError = 
-    e.status === 401 || 
-    e.code === 401 || 
-    e.response?.status === 401 ||
+    status === 401 ||
     e.message?.toLowerCase().includes("invalid authentication credentials") ||
     e.message?.toLowerCase().includes("invalid credentials") ||
     e.message?.toLowerCase().includes("expected oauth 2 access token") ||
@@ -568,6 +575,47 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
       });
 
       res.json({ text: response.text });
+    } catch (e: any) {
+      console.error(e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // AI Suggestions for Category
+  app.post("/api/ai/suggestions", async (req, res) => {
+    try {
+      const { category, type } = req.body;
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+      });
+      
+      const prompt = `Berikan 5-8 contoh deskripsi/keterangan singkat transaksi spesifik (maksimal 3 kata per contoh) yang sangat relevan untuk kategori "${category}" (jenis transaksi: ${type === "Income" ? "Pemasukan/Pendapatan" : "Pengeluaran"}).
+Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Beli Kopi Sore", "Jajan Cilok"]. Jangan berikan markdown atau teks penjelasan lain, balas HANYA dengan array JSON tersebut.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      let text = response.text || "[]";
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          return res.json({ suggestions: parsed });
+        }
+      } catch (err) {
+        console.error("Failed parsing AI suggestions: ", text, err);
+      }
+      
+      // Fallback suggestions
+      const fallbacks = type === "Income"
+        ? ["Gaji Bulanan", "Bonus Kerja", "Hasil Investasi", "Uang Saku"]
+        : ["Makan Siang", "Beli Bensin", "Belanja Bulanan", "Gojek/Grab", "Bayar Listrik", "Jajan Sore"];
+      res.json({ suggestions: fallbacks });
     } catch (e: any) {
       console.error(e);
       res.status(500).json({ error: e.message });

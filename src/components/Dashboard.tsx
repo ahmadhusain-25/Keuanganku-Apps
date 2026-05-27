@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AppLogo } from "./AppLogo";
 import { 
   fetchFinances, 
@@ -9,11 +9,12 @@ import {
   deleteTransaction, 
   resetTransactions, 
   Transaction,
-  fetchUserSpreadsheets
+  fetchUserSpreadsheets,
+  fetchAISuggestions
 } from "../api";
 import { format, parseISO } from "date-fns";
 import { id } from "date-fns/locale";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { 
   PlusCircle, 
   Calendar as CalendarIcon, 
@@ -43,14 +44,18 @@ import {
   Lock,
   Smartphone,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
 import { SettingsPanel } from "./SettingsPanel";
 import { FloatingAssistant } from "./FloatingAssistant";
 import { googleSignIn } from "../auth";
+import { BudgetDetails } from "./BudgetDetails";
 
 export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void }) => {
+  const adderFormRef = useRef<HTMLDivElement>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,12 +75,119 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [desc, setDesc] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (category === "Parkir" && type === "Expense") {
+      setAiSuggestions([]);
+      return;
+    }
+
+    let active = true;
+    const loadAiSuggestions = async () => {
+      setLoadingSuggestions(true);
+      try {
+        const data = await fetchAISuggestions(category, type);
+        if (active && data && Array.isArray(data.suggestions)) {
+          setAiSuggestions(data.suggestions);
+        }
+      } catch (err) {
+        console.error("Gagal memuat saran AI:", err);
+      } finally {
+        if (active) {
+          setLoadingSuggestions(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(() => {
+      loadAiSuggestions();
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [category, type]);
+
+  // Handle click on Income/Expense cards to switch type, adjust category and scroll to form field
+  const handleTypeCardClick = (targetType: "Income" | "Expense") => {
+    setType(targetType);
+    if (targetType === "Income") {
+      setCategory("Gaji");
+    } else {
+      setCategory("Makanan");
+    }
+    if (amount === "2000" || amount === "3000" || amount === "5000") {
+      setAmount("");
+    }
+    if (desc === "Parkir Motor" || desc === "Parkir Mobil") {
+      setDesc("");
+    }
+    setTimeout(() => {
+      if (adderFormRef.current) {
+        adderFormRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        // After scrolling, focus the rupiah input
+        const amountInput = adderFormRef.current.querySelector('input[type="number"]') as HTMLInputElement;
+        if (amountInput) {
+          amountInput.focus();
+        }
+      }
+    }, 150);
+  };
+
   // Notifications, WA destination, DoB
   const [reminderSummary, setReminderSummary] = useState("");
   const [reminderDate, setReminderDate] = useState("");
   const [phone, setPhone] = useState("");
+  const [savedPhones, setSavedPhones] = useState<string[]>(() => {
+    const saved = localStorage.getItem("owi_saved_phones");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("owi_saved_phones", JSON.stringify(savedPhones));
+  }, [savedPhones]);
+
+  const handleSavePhone = (numToSave: string) => {
+    const trimmed = numToSave.trim();
+    if (!trimmed) return;
+    if (!savedPhones.includes(trimmed)) {
+      setSavedPhones([...savedPhones, trimmed]);
+    }
+  };
+
+  const handleRemovePhone = (numToRemove: string) => {
+    setSavedPhones(savedPhones.filter(p => p !== numToRemove));
+  };
+
   const [dob, setDob] = useState("");
   const [waNotify, setWaNotify] = useState(true);
+
+  const amountInputRef = useRef<HTMLInputElement>(null);
+  const descInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCategoryChange = (val: string) => {
+    setCategory(val);
+    if (val === "Parkir") {
+      setAmount("2000");
+      setDesc("Parkir Motor");
+    } else {
+      if (amount === "2000" || amount === "3000" || amount === "5000") {
+        setAmount("");
+      }
+      if (desc === "Parkir Motor" || desc === "Parkir Mobil") {
+        setDesc("");
+      }
+    }
+  };
 
   // WhatsApp Chat bot state & rules
   const [waBotEnabled, setWaBotEnabled] = useState(true);
@@ -103,10 +215,18 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [designStyle, setDesignStyle] = useState<"modern" | "cute">("modern");
   const [customName, setCustomName] = useState(user?.displayName || "");
   const [customPhoto, setCustomPhoto] = useState(user?.photoURL || "");
-  const [monthlyBudget, setMonthlyBudget] = useState(2500000); // 2.5jt default
+  const [monthlyBudget, setMonthlyBudget] = useState(0); // 0 default
+  const [showBalance, setShowBalance] = useState<boolean>(() => {
+    const saved = localStorage.getItem("owi_show_balance");
+    return saved !== "false";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("owi_show_balance", String(showBalance));
+  }, [showBalance]);
 
   // Router pagination state
-  const [activePage, setActivePage] = useState<"dashboard" | "profile">("dashboard");
+  const [activePage, setActivePage] = useState<"dashboard" | "profile" | "budget_detail">("dashboard");
 
   // Date Range Filter States
   const [filterPreset, setFilterPreset] = useState<"all" | "today" | "7days" | "30days" | "thisMonth" | "custom">("all");
@@ -155,7 +275,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         if (p.designStyle) setDesignStyle(p.designStyle);
         if (p.customName) setCustomName(p.customName);
         if (p.customPhoto) setCustomPhoto(p.customPhoto);
-        if (p.monthlyBudget) setMonthlyBudget(Number(p.monthlyBudget));
+        if (p.monthlyBudget !== undefined && p.monthlyBudget !== null) setMonthlyBudget(Number(p.monthlyBudget));
       } catch (e) {}
     }
   }, []);
@@ -633,8 +753,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
       showToast("Transaksi berhasil ditambahkan!", "success");
       await loadData();
-      setAmount("");
-      setDesc("");
+      if (category === "Parkir" && type === "Expense") {
+        setAmount("2000");
+        setDesc("Parkir Motor");
+      } else {
+        setAmount("");
+        setDesc("");
+      }
     } catch (err: any) {
       showToast("Gagal menambah transaksi: " + err.message, "error");
     } finally {
@@ -746,6 +871,43 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   }));
 
   const COLORS = ['#6a8d73', '#f0a868', '#a78bfa', '#ec4899', '#3b82f6', '#f43f5e', '#a3e635', '#2dd4bf'];
+
+  // Daily spending trends calculation for current month
+  const getDailySpendingCurrentMonth = () => {
+    const today = new Date();
+    const curYear = today.getFullYear();
+    const curMonth = today.getMonth(); // 0-indexed
+    
+    // Days in current month
+    const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+    
+    const data = [];
+    const monthName = format(today, "MMMM", { locale: id });
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateString = `${curYear}-${String(curMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      // Sum expenses on this day
+      const dailyExpense = transactions
+        .filter(t => t.type === "Expense" && t.date === dateString)
+        .reduce((sum, t) => sum + t.amount, 0);
+        
+      data.push({
+        day: day,
+        displayDate: `${day} ${monthName.slice(0, 3)}`,
+        "Pengeluaran": dailyExpense,
+      });
+    }
+    
+    return data;
+  };
+
+  const dailySpendingData = getDailySpendingCurrentMonth();
+
+  const peakSpending = dailySpendingData.reduce(
+    (max, item) => (item["Pengeluaran"] > max.amount ? { day: item.day, displayDate: item.displayDate, amount: item["Pengeluaran"] } : max),
+    { day: 0, displayDate: "", amount: 0 }
+  );
 
   if (loading && transactions.length === 0) {
     return (
@@ -889,6 +1051,9 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             setCustomPhoto={setCustomPhoto}
             phone={phone}
             setPhone={setPhone}
+            savedPhones={savedPhones}
+            handleSavePhone={handleSavePhone}
+            handleRemovePhone={handleRemovePhone}
             dob={dob}
             setDob={setDob}
             themeMode={themeMode}
@@ -921,6 +1086,18 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             ui={ui}
             theme={theme}
             onBack={() => setActivePage("dashboard")}
+          />
+        ) : activePage === "budget_detail" ? (
+          <BudgetDetails
+            transactions={transactions}
+            monthlyBudget={monthlyBudget}
+            setMonthlyBudget={setMonthlyBudget}
+            remainingBudget={remainingBudget}
+            onBack={() => setActivePage("dashboard")}
+            ui={ui}
+            theme={theme}
+            isLight={isLight}
+            themeMode={themeMode}
           />
         ) : (
           <>
@@ -962,30 +1139,55 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
             {/* Balances & Budgets Row */}
             <div className="space-y-4">
-              <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className={`bg-gradient-to-br ${theme.card} text-white p-5 ${ui.panelRadius} shadow-xl relative overflow-hidden transition-all duration-500`}>
+              <section className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className={`bg-gradient-to-br ${theme.card} text-white p-5 ${ui.panelRadius} shadow-xl relative overflow-hidden transition-all duration-500 col-span-2 md:col-span-1`}>
                   <div className={`absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl`}></div>
-                  <p className="text-white/80 text-xs mb-1 relative font-semibold uppercase tracking-wide">Total Saldo</p>
-                  <h2 className="text-2xl font-bold relative tracking-tight">Rp {balance.toLocaleString("id-ID")}</h2>
+                  <div className="flex items-center justify-between relative mb-1">
+                    <p className="text-white/80 text-xs font-semibold uppercase tracking-wide">Total Saldo</p>
+                    <button 
+                      onClick={() => setShowBalance(!showBalance)}
+                      className="p-1.5 rounded-full hover:bg-white/15 active:scale-90 transition-all text-white/80 hover:text-white cursor-pointer"
+                      title={showBalance ? "Sensor Saldo" : "Tampilkan Saldo"}
+                    >
+                      {showBalance ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <h2 className="text-2xl font-bold relative tracking-tight">
+                    {showBalance ? `Rp ${balance.toLocaleString("id-ID")}` : "Rp ••••••••"}
+                  </h2>
                 </div>
-                <div className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500`}>
+                <div 
+                  onClick={() => handleTypeCardClick("Income")}
+                  className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500 col-span-1 cursor-pointer select-none group hover:border-green-500/40 hover:bg-green-500/[0.02] dark:hover:bg-green-950/10 active:scale-95`}
+                  title="Klik untuk tambah pemasukan"
+                >
                   <div className="flex items-center gap-1.5 text-green-500 mb-1">
-                    <ArrowUpCircle className="w-4 h-4" />
+                    <ArrowUpCircle className="w-4 h-4 transition-transform group-hover:-translate-y-0.5" />
                     <p className="text-xs font-bold uppercase tracking-wide">Pemasukan</p>
                   </div>
                   <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {totalIncome.toLocaleString("id-ID")}</h2>
                 </div>
-                <div className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500`}>
+                <div 
+                  onClick={() => handleTypeCardClick("Expense")}
+                  className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500 col-span-1 cursor-pointer select-none group hover:border-red-500/40 hover:bg-red-500/[0.02] dark:hover:bg-red-950/10 active:scale-95`}
+                  title="Klik untuk tambah pengeluaran"
+                >
                   <div className="flex items-center gap-1.5 text-red-500 mb-1">
-                    <ArrowDownCircle className="w-4 h-4" />
+                    <ArrowDownCircle className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
                     <p className="text-xs font-bold uppercase tracking-wide">Pengeluaran</p>
                   </div>
                   <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {totalExpense.toLocaleString("id-ID")}</h2>
                 </div>
-                <div className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500`}>
+                <div 
+                  onClick={() => setActivePage("budget_detail")}
+                  className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500 col-span-2 md:col-span-1 cursor-pointer select-none group hover:border-emerald-550/40 hover:bg-emerald-500/[0.02] dark:hover:bg-emerald-950/10 active:scale-95`}
+                  title="Klik untuk detail budget & riwayat"
+                >
                   <div className={`flex items-center gap-1.5 ${remainingBudget < 0 ? 'text-red-500' : theme.icon} mb-1`}>
-                    <Target className="w-4 h-4" />
-                    <p className="text-xs font-bold uppercase tracking-wide">Sisa Anggaran</p>
+                    <Target className="w-4 h-4 transition-transform group-hover:scale-110" />
+                    <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
+                      Sisa Anggaran <span className="text-[9px] lowercase opacity-50 font-normal">• detail</span>
+                    </p>
                   </div>
                   <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {remainingBudget.toLocaleString("id-ID")}</h2>
                 </div>
@@ -1021,6 +1223,89 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                   </div>
                 </div>
               </section>
+
+              {/* Daily Spending Trends LineChart */}
+              <section className={`${ui.panelBg} border p-5 md:p-6 ${ui.panelRadius} transition-all duration-500 space-y-4 shadow-xl shadow-emerald-950/5`}>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <h3 className={`text-sm font-bold ${ui.textMain} flex items-center gap-2`}>
+                      <svg className={`w-4 h-4 ${theme.icon}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.541" />
+                      </svg>
+                      Tren Pengeluaran Harian Bulan Ini
+                    </h3>
+                    <p className={`text-[11px] ${ui.textMuted} mt-0.5`}>
+                      Visualisasi grafik pengeluaran anggaran harian Anda sepanjang bulan {format(new Date(), "MMMM yyyy", { locale: id })}
+                    </p>
+                  </div>
+                  
+                  {peakSpending.amount > 0 && (
+                    <div className={`px-4.5 py-2 rounded-2xl flex items-center gap-2.5 ${isLight ? 'bg-amber-500/10 text-amber-700' : 'bg-amber-500/5 text-amber-500'} border border-amber-500/15 text-xs font-bold shrink-0 animate-fadeIn`}>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                      <span>
+                        Hari Terboros: <span className="font-extrabold text-amber-600 dark:text-amber-400">Rp {peakSpending.amount.toLocaleString("id-ID")}</span> (tgl {peakSpending.day})
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="h-60 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={dailySpendingData}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0.25}/>
+                          <stop offset="95%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={ui.chartTheme.border} opacity={0.5} />
+                      <XAxis 
+                        dataKey="day" 
+                        tickLine={false}
+                        axisLine={false}
+                        stroke={isLight ? "#94a3b8" : "#475569"}
+                        style={{ fontSize: '10px', fontWeight: 'bold' }}
+                        dy={8}
+                      />
+                      <YAxis 
+                        tickLine={false}
+                        axisLine={false}
+                        stroke={isLight ? "#94a3b8" : "#475569"}
+                        style={{ fontSize: '10px', fontWeight: 'bold' }}
+                        tickFormatter={(value) => value >= 1000000 ? `${(value/1000000).toFixed(1)}jt` : value >= 1000 ? `${(value/1000).toFixed(0)}rb` : value}
+                        dx={-4}
+                      />
+                      <RechartsTooltip
+                        formatter={(value: number) => [`Rp ${value.toLocaleString("id-ID")}`, "Total Pengeluaran"]}
+                        labelFormatter={(label) => `Tanggal ${label} ${format(new Date(), "MMMM", { locale: id })}`}
+                        contentStyle={{
+                          backgroundColor: ui.chartTheme.bg,
+                          borderColor: ui.chartTheme.border,
+                          color: ui.chartTheme.text,
+                          borderRadius: '1.25rem',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="Pengeluaran"
+                        stroke={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"}
+                        strokeWidth={2.5}
+                        dot={{ r: 1.5, strokeWidth: 1, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
             </div>
 
             {/* Split dashboard column layouts */}
@@ -1029,7 +1314,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               <div className="lg:col-span-2 space-y-6">
                 
                 {/* Form Adder Component */}
-                <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500`}>
+                <div ref={adderFormRef} className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 scroll-mt-20`}>
                   <h3 className={`text-base font-bold ${ui.textMain} mb-4 flex items-center gap-2`}>
                     <PlusCircle className={`w-5 h-5 ${theme.icon}`} /> Tambah Transaksi Keuangan
                   </h3>
@@ -1039,7 +1324,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase`}>Jenis Transaksi</label>
                         <select 
                           value={type} 
-                          onChange={e => setType(e.target.value as "Income" | "Expense")}
+                          onChange={e => {
+                            const newType = e.target.value as "Income" | "Expense";
+                            setType(newType);
+                            handleCategoryChange(newType === "Income" ? "Gaji" : "Makanan");
+                          }}
                           className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
                         >
                           <option value="Expense" className={ui.selectOption}>Pengeluaran</option>
@@ -1062,7 +1351,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         {type === "Expense" ? (
                           <select 
                             value={category} 
-                            onChange={e => setCategory(e.target.value)}
+                            onChange={e => handleCategoryChange(e.target.value)}
                             className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
                           >
                             <option value="Makanan" className={ui.selectOption}>Makanan 🍔</option>
@@ -1071,40 +1360,163 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                             <option value="Tagihan" className={ui.selectOption}>Tagihan ⚡</option>
                             <option value="Hiburan" className={ui.selectOption}>Hiburan 🎬</option>
                             <option value="Kesehatan" className={ui.selectOption}>Kesehatan 💊</option>
+                            <option value="Parkir" className={ui.selectOption}>Parkir 🅿️</option>
                             <option value="Lainnya" className={ui.selectOption}>Lainnya 📦</option>
                           </select>
                         ) : (
-                          <input 
-                            type="text" 
-                            value={category}
-                            onChange={e => setCategory(e.target.value)}
-                            placeholder="Gaji, Investasi, Bonus, dll"
-                            className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
-                            required
-                          />
+                          <select 
+                            value={category} 
+                            onChange={e => handleCategoryChange(e.target.value)}
+                            className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
+                          >
+                            <option value="Gaji" className={ui.selectOption}>Gaji 💰</option>
+                            <option value="Investasi" className={ui.selectOption}>Investasi 📈</option>
+                            <option value="Bonus" className={ui.selectOption}>Bonus 🎁</option>
+                            <option value="Keuntungan" className={ui.selectOption}>Keuntungan 🤝</option>
+                          </select>
                         )}
                       </div>
                       <div>
                         <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase`}>Nominal Rupiah (Rp)</label>
                         <input 
                           type="number" 
+                          ref={amountInputRef}
                           value={amount}
                           onChange={e => setAmount(e.target.value)}
                           placeholder="Masukkan angka nominal"
                           className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
                           required
                         />
+                        {category === "Parkir" && type === "Expense" && (
+                          <div className="mt-1.5 text-left animate-fadeIn">
+                            <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Pilih Nominal Parkir:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {[
+                                { val: "2000", label: "2.000 (Default)" },
+                                { val: "3000", label: "3.000" },
+                                { val: "5000", label: "5.000" }
+                              ].map((opt) => (
+                                <button
+                                  type="button"
+                                  key={opt.val}
+                                  onClick={() => setAmount(opt.val)}
+                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all border cursor-pointer select-none ${
+                                    amount === opt.val
+                                      ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold"
+                                      : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-500 dark:text-slate-400`
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAmount("");
+                                  setTimeout(() => amountInputRef.current?.focus(), 50);
+                                }}
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all border cursor-pointer select-none ${
+                                  amount !== "2000" && amount !== "3000" && amount !== "5000"
+                                    ? "bg-orange-500/15 border-orange-500 text-orange-600 dark:text-orange-450 font-bold"
+                                    : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-500 dark:text-slate-400`
+                                }`}
+                              >
+                                Isi Sendiri
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="sm:col-span-2">
                         <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase`}>Keterangan Deskripsi</label>
                         <input 
                           type="text" 
+                          ref={descInputRef}
                           value={desc}
                           onChange={e => setDesc(e.target.value)}
                           placeholder="Format: Beli kuota internet, cilok bakar sore, dll"
                           className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
                           required
                         />
+                        {category === "Parkir" && type === "Expense" ? (
+                          <div className="mt-1.5 text-left animate-fadeIn">
+                            <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Pilih Keterangan Parkir:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {[
+                                { val: "Parkir Motor", label: "Parkir Motor (Default)" },
+                                { val: "Parkir Mobil", label: "Parkir Mobil" }
+                              ].map((opt) => (
+                                <button
+                                  type="button"
+                                  key={opt.val}
+                                  onClick={() => setDesc(opt.val)}
+                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all border cursor-pointer select-none ${
+                                    desc === opt.val
+                                      ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold"
+                                      : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-500 dark:text-slate-400`
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDesc("");
+                                  setTimeout(() => descInputRef.current?.focus(), 50);
+                                }}
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all border cursor-pointer select-none ${
+                                  desc !== "Parkir Motor" && desc !== "Parkir Mobil"
+                                    ? "bg-orange-500/15 border-orange-500 text-orange-600 dark:text-orange-450 font-bold"
+                                    : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-500 dark:text-slate-400`
+                                }`}
+                              >
+                                Isi Sendiri
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-left animate-fadeIn">
+                            <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1 flex items-center gap-1.5`}>
+                              Saran Keterangan (Owi AI🦉):
+                              {loadingSuggestions && (
+                                <span className="inline-block w-2.5 h-2.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
+                              )}
+                            </span>
+                            <div className="flex flex-wrap gap-1.5 min-h-[32px]">
+                              {(() => {
+                                const suggestionsToShow = aiSuggestions.length > 0
+                                  ? aiSuggestions
+                                  : (() => {
+                                      const defaultSuggestions = type === "Income" 
+                                        ? ["Gaji Bulanan", "Bonus Kerja", "Hasil Investasi", "Uang Saku"]
+                                        : ["Makan Siang", "Beli Bensin", "Belanja Bulanan", "Gojek/Grab", "Bayar Listrik", "Jajan Sore"];
+                                      const historySuggestions: string[] = Array.from(new Set(
+                                        transactions
+                                          .filter(t => t.type === type && t.description && t.description.trim())
+                                          .map(t => t.description.trim())
+                                      ));
+                                      return Array.from(new Set([...historySuggestions, ...defaultSuggestions])).slice(0, 8);
+                                    })();
+
+                                return suggestionsToShow.map((suggestion) => (
+                                  <button
+                                    type="button"
+                                    key={suggestion}
+                                    onClick={() => setDesc(suggestion)}
+                                    className={`text-[10px] px-2.5 py-1 rounded-full font-bold transition-all border cursor-pointer select-none ${
+                                      desc.trim().toLowerCase() === suggestion.trim().toLowerCase()
+                                        ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold"
+                                        : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-500 dark:text-slate-400`
+                                    }`}
+                                  >
+                                    {suggestion}
+                                  </button>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       
                       {/* WA trigger toggle info */}
@@ -1122,8 +1534,30 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                       </div>
 
                       {waNotify && (
-                        <div className="sm:col-span-2">
-                          <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase`}>Nomor WhatsApp Pemantau</label>
+                        <div className="sm:col-span-2 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <label className={`block text-[10px] font-bold ${ui.textMuted} uppercase`}>Nomor WhatsApp Tujuan</label>
+                            
+                            <div className="flex gap-1.5">
+                              {phone.trim() && !savedPhones.includes(phone.trim()) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavePhone(phone)}
+                                  className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                >
+                                  Simpan Nomor
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => { setPhone(""); }}
+                                className="text-[10px] bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                              >
+                                Tambah Nomor Baru
+                              </button>
+                            </div>
+                          </div>
+                          
                           <input 
                             type="tel" 
                             value={phone}
@@ -1132,6 +1566,39 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                             className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
                             required={waNotify}
                           />
+
+                          {savedPhones.length > 0 && (
+                            <div className="pt-1">
+                              <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Nomor Tersimpan (klik untuk memilih):</span>
+                              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                                {savedPhones.map((num) => (
+                                  <div 
+                                    key={num} 
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border select-none ${
+                                      phone === num 
+                                        ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold" 
+                                        : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-600 dark:text-slate-400`
+                                    }`}
+                                  >
+                                    <span 
+                                      className="cursor-pointer font-bold text-[11px]" 
+                                      onClick={() => setPhone(num)}
+                                    >
+                                      {num}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemovePhone(num)}
+                                      className="text-slate-400 hover:text-red-500 transition-colors ml-0.5 p-0.5"
+                                      title="Hapus"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

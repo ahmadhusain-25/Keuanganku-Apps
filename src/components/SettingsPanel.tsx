@@ -30,6 +30,9 @@ interface SettingsPanelProps {
   setCustomPhoto: (photo: string) => void;
   phone: string;
   setPhone: (phone: string) => void;
+  savedPhones?: string[];
+  handleSavePhone?: (num: string) => void;
+  handleRemovePhone?: (num: string) => void;
   dob: string;
   setDob: (dob: string) => void;
   themeMode: "blue" | "purple" | "emerald" | "rose" | "pink";
@@ -73,6 +76,9 @@ export const SettingsPanel = ({
   setCustomPhoto,
   phone,
   setPhone,
+  savedPhones = [],
+  handleSavePhone,
+  handleRemovePhone,
   dob,
   setDob,
   themeMode,
@@ -444,15 +450,36 @@ export const SettingsPanel = ({
                   </div>
                   <div>
                     <h3 className={`text-base font-bold ${ui.textMain}`}> WhatsApp Bot & Otomatisasi</h3>
-                    <p className={`text-xs ${ui.textMuted}`}>Konfigurasi status bot, nomor whatsapp pemantau, and rule pemicu bot otomatis</p>
+                    <p className={`text-xs ${ui.textMuted}`}>Konfigurasi status bot, nomor whatsapp tujuan, and rule pemicu bot otomatis</p>
                   </div>
                 </div>
               </div>
 
               {/* Bot Destination Number */}
               <div className="space-y-4">
-                <div>
-                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>Nomor Tujuan Bot WA</label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className={`block text-xs font-bold ${ui.textMuted}`}>Nomor WhatsApp Tujuan</label>
+                    <div className="flex gap-1.5">
+                      {phone.trim() && !savedPhones.includes(phone.trim()) && handleSavePhone && (
+                        <button
+                          type="button"
+                          onClick={() => handleSavePhone(phone)}
+                          className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        >
+                          Simpan Nomor
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => { setPhone(""); }}
+                        className="text-[10px] bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                      >
+                        Tambah Nomor Baru
+                      </button>
+                    </div>
+                  </div>
+
                   <input
                     type="tel"
                     value={phone}
@@ -461,6 +488,41 @@ export const SettingsPanel = ({
                     className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 outline-none transition-shadow font-semibold`}
                   />
                   <p className="text-[10px] text-slate-450 mt-1">Robot pengawas akan mengirim chat ke nomor aktif ini saat rule terpicu.</p>
+
+                  {savedPhones.length > 0 && (
+                    <div className="pt-1.5">
+                      <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Nomor Tersimpan (klik untuk memilih):</span>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                        {savedPhones.map((num) => (
+                          <div 
+                            key={num} 
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border select-none ${
+                              phone === num 
+                                ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold" 
+                                : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-600 dark:text-slate-400`
+                            }`}
+                          >
+                            <span 
+                              className="cursor-pointer font-bold text-[11px]" 
+                              onClick={() => setPhone(num)}
+                            >
+                              {num}
+                            </span>
+                            {handleRemovePhone && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhone(num)}
+                                className="text-slate-400 hover:text-red-500 transition-colors ml-0.5 p-0.5"
+                                title="Hapus"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t pt-4 border-slate-200/50 dark:border-slate-800 space-y-3">

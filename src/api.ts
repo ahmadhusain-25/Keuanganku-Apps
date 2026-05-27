@@ -1,4 +1,4 @@
-import { getAccessToken } from "./auth";
+import { getAccessToken, clearAccessToken } from "./auth";
 
 export interface Transaction {
   id: string;
@@ -33,27 +33,34 @@ const handleResponse = async (res: Response, defaultMessage: string) => {
   if (!res.ok) {
     let errorMessage = defaultMessage;
     let isAuthError = false;
+    let errorCode = "";
     try {
       const errorData = await res.json();
       if (errorData?.error) {
         errorMessage = errorData.error;
+      }
+      if (errorData?.code) {
+        errorCode = errorData.code;
       }
     } catch (_) {}
 
     const lowerError = errorMessage.toLowerCase();
     if (
       res.status === 401 ||
+      errorCode === "GOOGLE_AUTH_ERROR" ||
       lowerError.includes("access token") ||
       lowerError.includes("invalid authentication credentials") ||
       lowerError.includes("auth") ||
       lowerError.includes("credential") ||
       lowerError.includes("unauthorized") ||
+      lowerError.includes("session_expired") ||
       lowerError.includes("gaxioserror")
     ) {
       isAuthError = true;
     }
 
     if (isAuthError) {
+      clearAccessToken();
       throw new Error("UNAUTHORIZED_SESSION_EXPIRED");
     }
     throw new Error(errorMessage);
@@ -211,4 +218,17 @@ export const sendAIChatMessage = async (
     body: JSON.stringify({ message, history, transactions })
   });
   return handleResponse(res, "Failed to get response from Owi AI Chat");
+};
+
+export const fetchAISuggestions = async (category: string, type: string) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/ai/suggestions"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ category, type })
+  });
+  return handleResponse(res, "Failed to fetch AI suggestions");
 };
