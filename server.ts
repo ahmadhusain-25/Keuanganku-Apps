@@ -3,8 +3,35 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 
 const PORT = 3000;
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+}) : null;
+
+let openaiClient: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openaiClient && process.env.OPENROUTER_API_KEY) {
+    openaiClient = new OpenAI({ 
+      apiKey: process.env.OPENROUTER_API_KEY, 
+      baseURL: "https://openrouter.ai/api/v1" 
+    });
+  }
+  return openaiClient;
+}
+
+let nvidiaClient: OpenAI | null = null;
+function getNvidiaClient() {
+  if (!nvidiaClient && process.env.NVIDIA_API_KEY) {
+    nvidiaClient = new OpenAI({ 
+      apiKey: process.env.NVIDIA_API_KEY, 
+      baseURL: "https://integrate.api.nvidia.com/v1" 
+    });
+  }
+  return nvidiaClient;
+}
 
 // Set up Google Drive, Sheets, Calendar wrappers
 function getAuthClient(authHeader: string | undefined) {
@@ -55,92 +82,100 @@ async function startServer() {
     res.json({ status: "ok", message: "Keuanganku API Running" });
   });
 
+  async function getResolvedSpreadsheetId(auth: any, spreadsheetId: string | undefined): Promise<string> {
+    const drive = google.drive({ version: "v3", auth });
+    const sheets = google.sheets({ version: "v4", auth });
+
+    let fileId = spreadsheetId;
+
+    if (!fileId || fileId === "undefined" || fileId === "null" || fileId === "monthly") {
+      // Find or create the folder "Aplikasi_Keuanganku"
+      let folderId = "";
+      const folderSearchRes = await drive.files.list({
+        q: "name='Aplikasi_Keuanganku' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+        spaces: "drive",
+      });
+
+      if (folderSearchRes.data.files && folderSearchRes.data.files.length > 0) {
+        folderId = folderSearchRes.data.files[0].id!;
+      } else {
+        const createFolderRes = await drive.files.create({
+          requestBody: {
+            name: "Aplikasi_Keuanganku",
+            mimeType: "application/vnd.google-apps.folder",
+          },
+        });
+        folderId = createFolderRes.data.id!;
+      }
+
+      const date = new Date();
+      const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+      const fileName = `Keuanganku_Data_${monthNames[date.getMonth()]}_${date.getFullYear()}`;
+
+      // Find or create the spreadsheet for the current month
+      const searchRes = await drive.files.list({
+        q: `name='${fileName}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false and '${folderId}' in parents`,
+        spaces: "drive",
+      });
+
+      if (searchRes.data.files && searchRes.data.files.length > 0) {
+        fileId = searchRes.data.files[0].id!;
+      } else {
+        // Create it
+        const createRes = await sheets.spreadsheets.create({
+          requestBody: {
+            properties: { title: fileName },
+            sheets: [
+              {
+                properties: { title: "Transactions" },
+                data: [
+                  {
+                    startRow: 0,
+                    startColumn: 0,
+                    rowData: [
+                      {
+                        values: [
+                          { userEnteredValue: { stringValue: "ID" } },
+                          { userEnteredValue: { stringValue: "Date" } },
+                          { userEnteredValue: { stringValue: "Type" } },
+                          { userEnteredValue: { stringValue: "Category" } },
+                          { userEnteredValue: { stringValue: "Amount" } },
+                          { userEnteredValue: { stringValue: "Description" } },
+                        ]
+                      } // headers
+                    ]
+                  } // Data
+                ]
+              }
+            ]
+          }
+        });
+        fileId = createRes.data.spreadsheetId!;
+        
+        // Move to folder
+        const currentFile = await drive.files.get({
+          fileId: fileId,
+          fields: 'parents'
+        });
+        const previousParents = currentFile.data.parents?.join(',') || '';
+        await drive.files.update({
+          fileId: fileId,
+          addParents: folderId,
+          removeParents: previousParents,
+        });
+      }
+    }
+    return fileId!;
+  }
+
   // Finance Integration - Setup or read
   app.get("/api/finances", async (req, res) => {
     try {
       const auth = getAuthClient(req.headers.authorization);
-      const drive = google.drive({ version: "v3", auth });
       const sheets = google.sheets({ version: "v4", auth });
 
-      let fileId = req.query.spreadsheetId as string;
-
-      if (!fileId || fileId === "undefined" || fileId === "null" || fileId === "monthly") {
-        // Find or create the folder "Aplikasi_Keuanganku"
-        let folderId = "";
-        const folderSearchRes = await drive.files.list({
-          q: "name='Aplikasi_Keuanganku' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-          spaces: "drive",
-        });
-
-        if (folderSearchRes.data.files && folderSearchRes.data.files.length > 0) {
-          folderId = folderSearchRes.data.files[0].id!;
-        } else {
-          const createFolderRes = await drive.files.create({
-            requestBody: {
-              name: "Aplikasi_Keuanganku",
-              mimeType: "application/vnd.google-apps.folder",
-            },
-          });
-          folderId = createFolderRes.data.id!;
-        }
-
-        const date = new Date();
-        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-        const fileName = `Keuanganku_Data_${monthNames[date.getMonth()]}_${date.getFullYear()}`;
-
-        // Find or create the spreadsheet for the current month
-        const searchRes = await drive.files.list({
-          q: `name='${fileName}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false and '${folderId}' in parents`,
-          spaces: "drive",
-        });
-
-        if (searchRes.data.files && searchRes.data.files.length > 0) {
-          fileId = searchRes.data.files[0].id!;
-        } else {
-          // Create it
-          const createRes = await sheets.spreadsheets.create({
-            requestBody: {
-              properties: { title: fileName },
-              sheets: [
-                {
-                  properties: { title: "Transactions" },
-                  data: [
-                    {
-                      startRow: 0,
-                      startColumn: 0,
-                      rowData: [
-                        {
-                          values: [
-                            { userEnteredValue: { stringValue: "ID" } },
-                            { userEnteredValue: { stringValue: "Date" } },
-                            { userEnteredValue: { stringValue: "Type" } },
-                            { userEnteredValue: { stringValue: "Category" } },
-                            { userEnteredValue: { stringValue: "Amount" } },
-                            { userEnteredValue: { stringValue: "Description" } },
-                          ]
-                        } // headers
-                      ]
-                    } // Data
-                  ]
-                }
-              ]
-            }
-          });
-          fileId = createRes.data.spreadsheetId!;
-          
-          // Move to folder
-          const file = await drive.files.get({
-             fileId: fileId,
-             fields: 'parents'
-          });
-          const previousParents = file.data.parents?.join(',') || '';
-          await drive.files.update({
-             fileId: fileId,
-             addParents: folderId,
-             removeParents: previousParents,
-          });
-        }
-      }
+      const requestedId = req.query.spreadsheetId as string;
+      const fileId = await getResolvedSpreadsheetId(auth, requestedId);
 
       // Read Data
       const getRes = await sheets.spreadsheets.values.get({
@@ -170,10 +205,11 @@ async function startServer() {
       const auth = getAuthClient(req.headers.authorization);
       const sheets = google.sheets({ version: "v4", auth });
       const { spreadsheetId, date, type, category, amount, description } = req.body;
+      const fileId = await getResolvedSpreadsheetId(auth, spreadsheetId);
       const id = Date.now().toString();
 
       await sheets.spreadsheets.values.append({
-        spreadsheetId,
+        spreadsheetId: fileId,
         range: "Transactions!A:F",
         valueInputOption: "USER_ENTERED",
         requestBody: {
@@ -192,7 +228,8 @@ async function startServer() {
     try {
       const auth = getAuthClient(req.headers.authorization);
       const sheets = google.sheets({ version: "v4", auth });
-      const spreadsheetId = req.query.spreadsheetId as string;
+      const requestedId = req.query.spreadsheetId as string;
+      const spreadsheetId = await getResolvedSpreadsheetId(auth, requestedId);
       
       // Get current rows to check existing data range
       const getRes = await sheets.spreadsheets.values.get({
@@ -218,7 +255,8 @@ async function startServer() {
     try {
       const auth = getAuthClient(req.headers.authorization);
       const sheets = google.sheets({ version: "v4", auth });
-      const spreadsheetId = req.query.spreadsheetId as string;
+      const requestedId = req.query.spreadsheetId as string;
+      const spreadsheetId = await getResolvedSpreadsheetId(auth, requestedId);
       const txId = req.params.id;
 
       // finding the row
@@ -285,59 +323,106 @@ async function startServer() {
     }
   });
 
-  app.post("/api/whatsapp/notify", async (req, res) => {
+  // Budget management
+  app.get("/api/budget", async (req, res) => {
+    try {
+      const auth = getAuthClient(req.headers.authorization);
+      const sheets = google.sheets({ version: "v4", auth });
+      const requestedId = req.query.spreadsheetId as string;
+      const spreadsheetId = await getResolvedSpreadsheetId(auth, requestedId);
+      
+      try {
+        const getRes = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: "Settings!B1",
+        });
+        res.json({ budget: Number(getRes.data.values?.[0]?.[0] || 0) });
+      } catch (e: any) {
+        // If sheet doesn't exist, return 0 budget
+        res.json({ budget: 0 });
+      }
+    } catch (e: any) {
+      handleGoogleError(res, e, "Error fetching budget");
+    }
+  });
+
+  app.post("/api/budget", async (req, res) => {
+    try {
+      const auth = getAuthClient(req.headers.authorization);
+      const sheets = google.sheets({ version: "v4", auth });
+      const { spreadsheetId: requestedId, budget } = req.body;
+      const spreadsheetId = await getResolvedSpreadsheetId(auth, requestedId);
+      
+      // Try to update, if fail, try to add sheet
+      try {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: "Settings!B1",
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[budget]] }
+        });
+      } catch(e: any) {
+        // Create sheet
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          requestBody: {
+            requests: [{ addSheet: { properties: { title: "Settings" } } }]
+          }
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: "Settings!B1",
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [[budget]] }
+        });
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: "Settings!A1",
+          valueInputOption: "USER_ENTERED",
+          requestBody: { values: [["Batas Budget Bulanan"]] }
+        });
+      }
+      res.json({ success: true });
+    } catch (e: any) {
+      handleGoogleError(res, e, "Error updating budget");
+    }
+  });
+
+  app.post("/api/wa/notify", async (req, res) => {
     try {
       const { phone, message } = req.body;
       if (!phone || !message) {
         return res.status(400).json({ error: "Phone number and message are required." });
       }
 
-      // Fonnte API Key provided by user (with support for environment override)
+      // Fonnte API Key provided by user
       const fonnteToken = process.env.FONNTE_API_KEY || "o2ibg27orvbi75tc4fDi";
-
-      const params = new URLSearchParams();
-      params.append("target", phone);
-      params.append("message", message);
-      params.append("countryCode", "62"); // default handling for Indonesian local format (starts with 0)
 
       console.log(`[Fonnte Bot] Sending WA message to ${phone}...`);
       
+      const params = new URLSearchParams();
+      params.append('target', phone);
+      params.append('message', message);
+      params.append('delay', '2'); // optional delay
+
       const response = await fetch("https://api.fonnte.com/send", {
         method: "POST",
         headers: {
-          "Authorization": fonnteToken
+          "Authorization": fonnteToken,
         },
         body: params
       });
 
-      const responseText = await response.text();
-      let responseData: any;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { raw: responseText };
+      const responseData = await response.json();
+      
+      if (!responseData.status) {
+        throw new Error(responseData.reason || "Failed to send WA message via Fonnte");
       }
 
-      if (response.ok) {
-        console.log(`[Fonnte Bot] Sent successfully:`, responseData);
-        const cleanPhone = phone.replace(/[^0-9]/g, "");
-        const link = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-        res.json({ 
-          success: true, 
-          waLink: link, 
-          fonnteResponse: responseData 
-        });
-      } else {
-        console.error(`[Fonnte Bot] API returned error status ${response.status}:`, responseData);
-        res.status(response.status).json({ 
-          success: false, 
-          error: "Fonnte API error status", 
-          details: responseData 
-        });
-      }
-    } catch (e: any) {
-      console.error("[Fonnte Bot] Internal Server Error:", e);
-      res.status(500).json({ success: false, error: e.message });
+      return res.status(200).json({ success: true, fonnteResponse: responseData });
+    } catch (error: any) {
+      console.warn("[Fonnte Bot] Warning:", error.message);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
@@ -372,11 +457,6 @@ async function startServer() {
       const messages = msgsRes.data.messages || [];
       const scannedTransactions = [];
 
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
-
       for (const msgInfo of messages) {
         try {
           const msgDetail = await gmail.users.messages.get({
@@ -405,12 +485,17 @@ async function startServer() {
 
           const prompt = `Analisis isi email dari: ${from}\nSubjek: ${subject}\nIsi: ${bodyText.slice(0, 1500)}\n\nTentukan apakah email ini berisi transaksi finansial asli (pembayaran, transfer, belanja, kuitansi, atau tagihan yang sudah terbayar). Jawab HANYA menggunakan format JSON berikut, jangan berikan markdown atau penjelasan lain:\n{\n  "isTransaction": true,\n  "type": "Expense",\n  "category": "Belanja",\n  "amount": 150000,\n  "description": "Beli sepatu baru",\n  "date": "2026-05-26"\n}\nJika bukan transaksi finansial, silakan return:\n{\n  "isTransaction": false\n}`;
 
-          const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
-            contents: prompt,
+          const openAIClient = getOpenAIClient();
+          if (!openAIClient) {
+            throw new Error("OpenRouter API key not configured");
+          }
+
+          const completion = await openAIClient.chat.completions.create({
+            model: "meta-llama/llama-3-70b-instruct",
+            messages: [{ role: "user", content: prompt }]
           });
 
-          let textResponse = response.text || "{}";
+          let textResponse = completion.choices[0].message.content || "{}";
           // strip any markdown encapsulation if present
           textResponse = textResponse.replace(/```json/gi, "").replace(/```/g, "").trim();
 
@@ -672,123 +757,104 @@ async function startServer() {
            `Bolehkah Owi tahu apa tujuan finansial terdekatmu? Seperti membeli barang impian, dana darurat, atau lainnya? Owi siap mendengarkan! 🪙💚`;
   }
 
-  // Helper to run generateContent with automatic fallback across multi-generation models
+  // Helper to run chat completions with automatic fallback
   async function generateContentWithFallback(
-    ai: any,
-    defaultModel: string,
-    params: { contents: any; config?: any }
+    params: { messages?: Array<{role: string, content: string}>, prompt?: string }
   ) {
-    const candidateModels = [
-      "gemini-3.5-flash",
-      "gemini-3.1-flash-lite",
-      "gemini-flash-latest",
-      "gemini-2.5-flash",
-      "gemini-1.5-flash"
+    const candidateRouterModels = [
+      "meta-llama/llama-3-70b-instruct",
+      "openai/gpt-4o"
     ];
 
-    const now = Date.now();
-    const workingModels: string[] = [];
-    const cooledDownModels: string[] = [];
-
-    // Prioritize working models first
-    const allUniqueCandidates = Array.from(new Set([defaultModel, ...candidateModels]));
-    for (const m of allUniqueCandidates) {
-      const lastLimited = rateLimitedModels.get(m) || 0;
-      if (now - lastLimited > COOLDOWN_DURATION_MS) {
-        workingModels.push(m);
-      } else {
-        cooledDownModels.push(m);
-      }
-    }
-
-    // Try working ones first; fall back to cooldown ones only as last resort
-    const orderedModels = [...workingModels, ...cooledDownModels];
-    console.log(`[Owi AI] Model queue: ${JSON.stringify(orderedModels)} (Active working: ${JSON.stringify(workingModels)}, Cooling down: ${JSON.stringify(cooledDownModels)})`);
-
-    let lastError: any = null;
-
-    for (const modelName of orderedModels) {
+    // 1. Try Gemini first
+    if (ai) {
       try {
-        console.log(`[Owi AI] Attempting generateContent using: ${modelName}`);
+        console.log(`[Owi AI] Attempting Gemini chat completion`);
+        const contents = params.messages ? params.messages.map((m: any) => ({
+          role: m.role === 'system' ? 'user' : m.role,
+          parts: [{ text: m.content }]
+        })) : [{ parts: [{ text: params.prompt }] }];
+        
         const response = await ai.models.generateContent({
-          model: modelName,
-          contents: params.contents,
-          config: params.config
+          model: "gemini-3.5-flash",
+          contents: contents,
         });
-        console.log(`[Owi AI] Successfully generated content using model: ${modelName}`);
         
-        // Remove from rate-limited if successful
-        rateLimitedModels.delete(modelName);
-        return response;
+        console.log(`[Owi AI] Successfully generated content using Gemini`);
+        return response.text || "";
       } catch (e: any) {
-        lastError = e;
-        const errText = String(e.message || e).toLowerCase();
-        
-        if (
-          errText.includes("quota") ||
-          errText.includes("limit") ||
-          errText.includes("rate") ||
-          errText.includes("exhausted") ||
-          errText.includes("429")
-        ) {
-          console.warn(`[Owi AI Warning] Model ${modelName} rate limited / quota hit: ${e.message || e}. Cool down started.`);
-          rateLimitedModels.set(modelName, Date.now());
-          continue;
-        }
-        
-        // Throw non-quota errors immediately
-        throw e;
+        console.warn(`[Owi AI Warning] Gemini API error: ${e.message || e}. Falling back...`);
       }
     }
 
-    throw lastError || new Error("All fallback models exhausted");
+    // 2. Fallback to NVIDIA
+    console.log(`[Owi AI] Attempting NVIDIA chat completion`);
+    const nvidiaClient = getNvidiaClient();
+    if (nvidiaClient) {
+      try {
+        const messages = params.messages || [{ role: "user", content: params.prompt || "" }];
+        const response = await nvidiaClient.chat.completions.create({
+          model: "meta/llama-3.1-70b-instruct",
+          messages: messages as any,
+        });
+        console.log(`[Owi AI] Successfully generated content using NVIDIA`);
+        return response.choices[0].message.content || "";
+      } catch (e: any) {
+        console.warn(`[Owi AI Warning] NVIDIA API failed: ${e.message || e}. Falling back to OpenRouter.`);
+      }
+    }
+
+    // 3. Fallback to OpenRouter
+    console.log(`[Owi AI] Attempting OpenRouter chat completion`);
+    const openAIClient = getOpenAIClient();
+    if (openAIClient) {
+      try {
+        const messages = params.messages || [{ role: "user", content: params.prompt || "" }];
+        
+        const response = await openAIClient.chat.completions.create({
+          model: candidateRouterModels[0],
+          messages: messages as any,
+        });
+        console.log(`[Owi AI] Successfully generated content using OpenRouter`);
+        return response.choices[0].message.content || "";
+      } catch (e: any) {
+        console.warn(`[Owi AI Warning] OpenRouter API failed: ${e.message || e}`);
+      }
+    }
+
+    return "";
   }
 
   // AI Summary
   app.post("/api/ai/summary", async (req, res) => {
-    const candidateModels = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
     const { transactions = [] } = req.body;
     try {
-      if (areAllModelsExhausted(candidateModels) || !process.env.GEMINI_API_KEY) {
-        console.log("All candidate models exhausted or no key. Using smart local analyzer fallback for summary.");
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      if (!hasAI) {
         return res.json({ text: getLocalOwiSummary(transactions) });
       }
 
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
       const prompt = `Analisis data transaksi keuangan berikut dan berikan ringkasan singkat serta saran keuangan yang baik dalam 2-3 paragraf bahasa Indonesia. Format response dalam plain text tanpa markdown berlebihan. Data: ${JSON.stringify(transactions)}`;
       
-      const response = await generateContentWithFallback(ai, "gemini-3.5-flash", {
-        contents: prompt
-      });
-      res.json({ text: response.text });
-    } catch (e: any) {
-      const errText = String(e.message || e).toLowerCase();
-      if (errText.includes("quota") || errText.includes("limit") || errText.includes("rate") || errText.includes("exhausted") || errText.includes("429")) {
-        console.log("Gemini API rate limit or quota hit during summary across models. Activating smart local analyzer fallback.");
-        return res.json({ text: getLocalOwiSummary(transactions) });
+      const text = await generateContentWithFallback({ prompt: prompt });
+      if (!text) {
+         return res.json({ text: getLocalOwiSummary(transactions) });
       }
+      res.json({ text });
+    } catch (e: any) {
       console.warn("AI Summary Error: ", e.message || e);
-      res.json({ text: "Maaf Teman Catat, koneksi Owi sedang sedikit terganggu. Tolong coba beberapa saat lagi ya! 🦉💚" });
+      res.json({ text: getLocalOwiSummary(transactions) });
     }
   });
 
   // AI Chat Assistant
   app.post("/api/ai/chat", async (req, res) => {
-    const candidateModels = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
     const { message, history = [], transactions = [] } = req.body;
     try {
-      if (areAllModelsExhausted(candidateModels) || !process.env.GEMINI_API_KEY) {
-        console.log("All candidate models exhausted or no key. Using smart local analyzer fallback for chat.");
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      if (!hasAI) {
         return res.json({ text: getLocalOwiChat(message, transactions) });
       }
-
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
 
       const systemInstruction = `Anda adalah "Owi", burung hantu pintar yang lucu, bijaksana, dan sangat ramah yang bertindak sebagai Asisten Keuangan Pribadi di aplikasi Keuanganku.
 Karakter Anda:
@@ -802,28 +868,20 @@ Konieks Transaksi Pengguna Saat Ini:
 ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada transaksi catat terinput."}
 `;
 
-      const formattedContents = [
-        ...history,
-        { role: "user", parts: [{ text: message }] }
+      const messages = [
+        { role: "system", content: systemInstruction },
+        ...history.map((h: any) => ({ role: h.role === "user" ? "user" : "assistant", content: h.parts[0].text })),
+        { role: "user", content: message }
       ];
 
-      const response = await generateContentWithFallback(ai, "gemini-3.5-flash", {
-        contents: formattedContents,
-        config: {
-          systemInstruction: systemInstruction,
-        }
-      });
-
-      res.json({ text: response.text });
-    } catch (e: any) {
-      console.error("AI Chat Error: ", e);
-      // Give a friendly in-character fallback response for quota exceeded or other errors
-      const lowerErr = (e.message || "").toLowerCase();
-      if (lowerErr.includes("quota") || lowerErr.includes("limit") || lowerErr.includes("rate") || lowerErr.includes("exhausted") || lowerErr.includes("api_key") || lowerErr.includes("api key") || lowerErr.includes("429")) {
-        console.log("Gemini API rate limit or quota hit during chat across models. Activating smart local analyzer fallback.");
+      const text = await generateContentWithFallback({ messages: messages });
+      if (!text) {
         return res.json({ text: getLocalOwiChat(message, transactions) });
       }
-      res.json({ text: "Maaf Teman Catat, koneksi Owi sedang sedikit terganggu. Tolong coba kirim pesan lagi ya! 🦉💚" });
+
+      res.json({ text });
+    } catch (e: any) {
+      res.json({ text: getLocalOwiChat(message, transactions) });
     }
   });
 
@@ -831,7 +889,7 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
   app.post("/api/ai/suggestions", async (req, res) => {
     const { category, type } = req.body;
     
-    // Prepare fallback suggestions based on category
+    // Fallbacks
     let fallbacks: string[] = [];
     if (type === "Income") {
       if (category === "Investasi") fallbacks = ["Dividen Saham", "Kupon Obligasi", "Profit Crypto", "Bunga Deposito"];
@@ -848,35 +906,28 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
       else fallbacks = ["Makan Siang", "Beli Bensin", "Belanja Bulanan", "Gojek/Grab", "Bayar Listrik", "Jajan Sore"];
     }
 
-    const candidateModels = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
     try {
-      if (areAllModelsExhausted(candidateModels) || !process.env.GEMINI_API_KEY) {
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      if (!hasAI) {
         return res.json({ suggestions: fallbacks });
       }
-
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-      });
       
       const prompt = `Berikan 5-8 contoh deskripsi/keterangan singkat transaksi spesifik (maksimal 3 kata per contoh) yang sangat relevan untuk kategori "${category}" (jenis transaksi: ${type === "Income" ? "Pemasukan/Pendapatan" : "Pengeluaran"}).
 Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Beli Kopi Sore", "Jajan Cilok"]. Jangan berikan markdown atau teks penjelasan lain, balas HANYA dengan array JSON tersebut.`;
 
-      const response = await generateContentWithFallback(ai, "gemini-3.5-flash", {
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json"
-        }
-      });
+      const text = await generateContentWithFallback({ prompt: prompt });
+      if (!text) {
+        return res.json({ suggestions: fallbacks });
+      }
 
-      let text = (response.text || "[]").trim();
+      let parsed: string[] = [];
       try {
-        // Clean up markdown code blocks if the response starts with ```
-        const match = text.match(/\[[\s\S]*\]/);
-        if (match) {
-          text = match[0];
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+        } else {
+            parsed = JSON.parse(text);
         }
-        const parsed = JSON.parse(text);
         if (Array.isArray(parsed)) {
           return res.json({ suggestions: parsed });
         }
@@ -886,7 +937,7 @@ Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Be
       
       return res.json({ suggestions: fallbacks });
     } catch (e: any) {
-      console.warn("Gemini suggestions failed or rate-limited: ", e.message || e);
+      console.warn("AI suggestions failed: ", e.message || e);
       return res.json({ suggestions: fallbacks });
     }
   });

@@ -18,7 +18,8 @@ import {
   Info,
   CheckCircle2,
   Calendar as CalendarIcon,
-  HelpCircle
+  HelpCircle,
+  Sparkles
 } from "lucide-react";
 
 interface SettingsPanelProps {
@@ -54,6 +55,10 @@ interface SettingsPanelProps {
   setWaBotNotifyOnAdd: (enabled: boolean) => void;
   waBotNotifyOnBudget: boolean;
   setWaBotNotifyOnBudget: (enabled: boolean) => void;
+  isAssistantEnabled: boolean;
+  setIsAssistantEnabled: (enabled: boolean) => void;
+  assistantSize: number;
+  setAssistantSize: (size: number) => void;
   handleCopyAppsScript: () => void;
   copiedScript: boolean;
   handleResetTransactions: () => Promise<void>;
@@ -100,6 +105,10 @@ export const SettingsPanel = ({
   setWaBotNotifyOnAdd,
   waBotNotifyOnBudget,
   setWaBotNotifyOnBudget,
+  isAssistantEnabled,
+  setIsAssistantEnabled,
+  assistantSize,
+  setAssistantSize,
   handleCopyAppsScript,
   copiedScript,
   handleResetTransactions,
@@ -112,13 +121,14 @@ export const SettingsPanel = ({
   theme,
   onBack
 }: SettingsPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "gsheets" | "wabot" | "danger">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "gsheets" | "aiAssistant" | "waBot" | "danger">("profile");
 
   const menuItems = [
     { id: "profile", label: "Profil & Akun", icon: <UserIcon className="w-4 h-4" /> },
     { id: "appearance", label: "Tema & Desain", icon: <Palette className="w-4 h-4" /> },
     { id: "gsheets", label: "Penyimpanan GSheet", icon: <FolderOpen className="w-4 h-4" /> },
-    { id: "wabot", label: "Bot WA & Notifikasi", icon: <MessageSquare className="w-4 h-4" /> },
+    { id: "aiAssistant", label: "Asisten AI", icon: <Sparkles className="w-4 h-4" /> },
+    { id: "waBot", label: "Bot WhatsApp & Notifikasi", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "danger", label: "Reset Data", icon: <AlertTriangle className="w-4 h-4" /> },
   ] as const;
 
@@ -126,7 +136,7 @@ export const SettingsPanel = ({
     emerald: { name: "Sage Green (Default)", color: "#6a8d73", secondary: "#e4ffe1" },
     blue: { name: "Elegant Royal Blue", color: "#3b82f6", secondary: "#ebf5ff" },
     purple: { name: "Cozy Lavender", color: "#8b5cf6", secondary: "#f5f3ff" },
-    rose: { name: "Warm Blossom Rose", color: "#f43f5e", secondary: "#fff1f2" },
+    rose: { name: "WhatsApprm Blossom Rose", color: "#f43f5e", secondary: "#fff1f2" },
     pink: { name: "Playful Sweet Pink", color: "#ec4899", secondary: "#fdf2f8" },
   };
 
@@ -238,7 +248,7 @@ export const SettingsPanel = ({
                   />
                 </div>
                 <div>
-                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>Email Terhubung</label>
+                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>WhatsApp Terhubung</label>
                   <input 
                     type="email"
                     value={user?.email || "tamu@keuanganku.local"}
@@ -248,7 +258,7 @@ export const SettingsPanel = ({
                   <p className="text-[10px] text-slate-400 mt-1">Digunakan sebagai pengenal kunci sinkronisasi</p>
                 </div>
                 <div>
-                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>No. Whatsapp Notifikasi</label>
+                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>No. WhatsApp Notifikasi</label>
                   <input 
                     type="tel"
                     value={phone}
@@ -286,7 +296,7 @@ export const SettingsPanel = ({
                 </div>
                 <div>
                   <h3 className={`text-base font-bold ${ui.textMain}`}>Tema & Gaya Antarmuka</h3>
-                  <p className={`text-xs ${ui.textMuted}`}>Atur palet warna utama, gaya bentuk tombol, and tema visual gelap/terang</p>
+                  <p className={`text-xs ${ui.textMuted}`}>Atur palet WhatsApprna utama, gaya bentuk tombol, and tema visual gelap/terang</p>
                 </div>
               </div>
 
@@ -323,7 +333,7 @@ export const SettingsPanel = ({
 
               {/* Theme Color Palette Selector */}
               <div className="space-y-3">
-                <h4 className={`text-sm font-bold ${ui.textMain}`}>Pilihan Palet Warna</h4>
+                <h4 className={`text-sm font-bold ${ui.textMain}`}>Pilihan Palet WhatsApprna</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {Object.entries(colorPalettePreview).map(([key, item]) => {
                     const isSelected = themeMode === key;
@@ -357,100 +367,65 @@ export const SettingsPanel = ({
                   <CheckCircle2 className="w-4 h-4" /> Preview Harmonisasi Tampilan
                 </p>
                 <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
-                  Aplikasi telah dikonfigurasi dengan font <strong>Space Grotesk</strong> (visual modern) berpadu bersama <strong>JetBrains Mono</strong> untuk kejelasan membaca data transaksi. Skema warna otomatis menyesuaikan elemen charts, tombol input, & wallpaper simulator Whatsapp.
+                  Aplikasi telah dikonfigurasi dengan font <strong>Space Grotesk</strong> (visual modern) berpadu bersama <strong>JetBrains Mono</strong> untuk kejelasan membaca data transaksi. Skema WhatsApprna otomatis menyesuaikan elemen charts, tombol input, & WhatsAppllpaper simulator WhatsApp.
                 </p>
               </div>
             </div>
           )}
 
-          {activeTab === "gsheets" && (
-            <div className="space-y-6">
-              {/* Spreadsheet Main Connector View */}
-              <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
-                <div className="flex items-center justify-between border-b pb-4 border-slate-200/50 dark:border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-500">
-                      <FolderOpen className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className={`text-base font-bold ${ui.textMain}`}>Koneksi Google Spreadsheet</h3>
-                      <p className={`text-xs ${ui.textMuted}`}>Semua data transaksi tersinkronisasi instan ke Google Drive spreadsheet Anda</p>
-                    </div>
-                  </div>
+          {activeTab === "aiAssistant" && (
+            <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
+              <div className="flex items-center gap-3 border-b pb-4 border-slate-200/50 dark:border-slate-800">
+                <div className={`p-2.5 rounded-xl ${theme.bg1} ${theme.icon}`}>
+                  <Sparkles className="w-5 h-5" />
                 </div>
-
-                {user?.isGuest ? (
-                  <div className="p-5 rounded-3xl bg-amber-500/10 border border-amber-500/20 space-y-3">
-                    <p className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
-                      <Info className="w-4 h-4" /> Mode Tamu Aktif (Guest Session)
-                    </p>
-                    <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
-                      Dalam mode tamu, data disimpan langsung di memori browser (<em>localStorage</em>) Anda. Untuk menyingkronkannya dengan Google Sheets di Drive Anda serta memicu kecerdasan Google Gemini, silakan login kembali menggunakan akun Google Anda.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">STATUS SINKRONISASI AKTIF ⚡</p>
-                        <p className={`text-sm font-bold ${ui.textMain} mt-1 truncate max-w-md`}>
-                          Spreadsheet ID: <code className="font-mono text-xs text-slate-500">{customSpreadsheetId === "monthly" ? "📂 Koleksi Bulanan Otomatis" : (customSpreadsheetId || "Sedang memuat...")}</code>
-                        </p>
-                      </div>
-                      <a 
-                        href={`https://docs.google.com/spreadsheets/d/${customSpreadsheetId === "monthly" ? "" : customSpreadsheetId}`} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className={`text-xs font-bold bg-[#6a8d73]/20 hover:bg-[#6a8d73]/30 text-[#6a8d73] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${customSpreadsheetId === "monthly" ? "opacity-50 pointer-events-none" : ""}`}
-                      >
-                        Buka Dokumen <ChevronRight className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className={`block text-xs font-bold ${ui.textMuted}`}>Ganti Database Aktif (Pilih Dokumen dari GDrive)</label>
-                      <div className="flex flex-col sm:flex-row items-center gap-3">
-                        <select
-                          value={customSpreadsheetId || "monthly"}
-                          onChange={(e) => handleCustomSpreadsheetChange(e.target.value)}
-                          className={`w-full ${ui.inputBg} border ${ui.inputRadius} p-3 text-sm focus:ring-2 ${theme.focus} outline-none cursor-pointer font-semibold`}
-                        >
-                          <option value="monthly">📂 Koleksi Bulanan Otomatis (Direkomendasikan)</option>
-                          {spreadsheetsList.map(item => (
-                            <option key={item.id} value={item.id}>📄 {item.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={loadSpreadsheetsList}
-                          disabled={loadingSpreadsheets}
-                          className={`w-full sm:w-auto px-4 py-3 flex items-center justify-center gap-2 border ${isLight ? 'border-slate-200 hover:bg-slate-50 text-slate-700' : 'border-white/10 hover:bg-white/5 text-slate-300'} text-xs font-bold ${ui.buttonRadius} transition-all whitespace-nowrap`}
-                          title="Refresh Database Google Drive"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${loadingSpreadsheets ? 'animate-spin' : ''}`} />
-                          Sync GDrive Info
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">Anda bisa memilih berkas spreadsheet lain yang berisi tabel Transactions jika ingin beralih tabungan.</p>
-                    </div>
-                  </div>
-                )}
+                <div>
+                  <h3 className={`text-base font-bold ${ui.textMain}`}>Asisten AI (Owi)</h3>
+                  <p className={`text-xs ${ui.textMuted}`}>Konfigurasi asisten AI mengapung: aktifkan & atur ukurannya</p>
+                </div>
               </div>
 
+              <div className="space-y-4">
+                <label className="flex items-center justify-between p-4 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10">
+                  <div className="flex flex-col pr-2">
+                    <span className={`text-sm font-bold ${ui.textMain}`}>Tampilkan Asisten AI</span>
+                    <span className="text-[10px] text-slate-400 mt-0.5">Aktifkan atau nonaktifkan Owi yang mengapung</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isAssistantEnabled}
+                    onChange={e => setIsAssistantEnabled(e.target.checked)}
+                    className="rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer h-5 w-5"
+                  />
+                </label>
 
+                <div className="space-y-2">
+                  <label className={`block text-xs font-bold ${ui.textMuted}`}>Ukuran Asisten (Skala)</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={assistantSize}
+                    onChange={e => setAssistantSize(Number(e.target.value))}
+                    className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                  <p className={`text-[10px] ${ui.textMuted}`}>Skala saat ini: {assistantSize.toFixed(1)}x</p>
+                </div>
+              </div>
             </div>
           )}
 
-          {activeTab === "wabot" && (
+          {activeTab === "waBot" && (
             <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
               <div className="flex items-center justify-between border-b pb-4 border-slate-200/50 dark:border-slate-800">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-green-500/15 text-green-500">
+                  <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-500">
                     <MessageSquare className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className={`text-base font-bold ${ui.textMain}`}> WhatsApp Bot & Otomatisasi</h3>
-                    <p className={`text-xs ${ui.textMuted}`}>Konfigurasi status bot, nomor whatsapp tujuan, and rule pemicu bot otomatis</p>
+                    <p className={`text-xs ${ui.textMuted}`}>Konfigurasi status bot, chat ID tujuan, and rule pemicu bot otomatis</p>
                   </div>
                 </div>
               </div>
@@ -465,9 +440,9 @@ export const SettingsPanel = ({
                         <button
                           type="button"
                           onClick={() => handleSavePhone(phone)}
-                          className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                          className="text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
                         >
-                          Simpan Nomor
+                          Simpan
                         </button>
                       )}
                       <button
@@ -475,30 +450,33 @@ export const SettingsPanel = ({
                         onClick={() => { setPhone(""); }}
                         className="text-[10px] bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
                       >
-                        Tambah Nomor Baru
+                        Tambah Baru
                       </button>
                     </div>
                   </div>
 
                   <input
-                    type="tel"
+                    type="text"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    placeholder="Contoh: 08123456789"
-                    className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 outline-none transition-shadow font-semibold`}
+                    placeholder="Contoh: 08123456789 atau 628123456789"
+                    className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow font-semibold`}
                   />
-                  <p className="text-[10px] text-slate-450 mt-1">Robot pengawas akan mengirim chat ke nomor aktif ini saat rule terpicu.</p>
+                  <p className="text-[10px] text-slate-450 mt-1">Robot pengaWhatsApps akan mengirim WhatsApp ke Nomor ini saat rule terpicu.</p>
+                  <div className="mt-2 text-left p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed font-medium">
+                    ⚠️ <strong>Penting:</strong> Pastikan Anda menggunakan versi WhatsApp aktif agar dapat menerima pesan via Fonnte API.
+                  </div>
 
                   {savedPhones.length > 0 && (
                     <div className="pt-1.5">
-                      <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Nomor Tersimpan (klik untuk memilih):</span>
+                      <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>ID Tersimpan (klik untuk memilih):</span>
                       <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
                         {savedPhones.map((num) => (
                           <div 
                             key={num} 
                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border select-none ${
                               phone === num 
-                                ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold" 
+                                ? "bg-blue-500/15 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold" 
                                 : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-600 dark:text-slate-400`
                             }`}
                           >
@@ -533,33 +511,33 @@ export const SettingsPanel = ({
                     <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10">
                       <div className="flex flex-col pr-2">
                         <span className={`text-sm font-bold ${ui.textMain}`}>Aktifkan Engine Bot</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">Nyalakan respon otomatis chatbot & simulator WhatsApp</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">Nyalakan respon otomatis via WhatsApp</span>
                       </div>
                       <input
                         type="checkbox"
                         checked={waBotEnabled}
                         onChange={e => setWaBotEnabled(e.target.checked)}
-                        className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4.5 w-4.5 accent-green-650"
+                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
                       />
                     </label>
 
                     <label className={`flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10 ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
                       <div className="flex flex-col pr-2">
                         <span className={`text-sm font-bold ${ui.textMain}`}>Notifikasi Transaksi Baru</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">Infokan otomatis lewat detail chat WA setiap kali ada pemasukan/pengeluaran baru</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">Infokan otomatis ke WhatsApp setiap kali ada pemasukan/pengeluaran baru</span>
                       </div>
                       <input
                         type="checkbox"
                         checked={waBotNotifyOnAdd}
                         onChange={e => setWaBotNotifyOnAdd(e.target.checked)}
                         disabled={!waBotEnabled}
-                        className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4.5 w-4.5 accent-green-650"
+                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
                       />
                     </label>
 
                     <label className={`flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10 ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
                       <div className="flex flex-col pr-2">
-                        <span className={`text-sm font-bold ${ui.textMain}`}>Pengawas Limit Belanja Bulanan</span>
+                        <span className={`text-sm font-bold ${ui.textMain}`}>PengaWhatsApps Limit Belanja Bulanan</span>
                         <span className="text-[10px] text-slate-400 mt-0.5">Berikan peringatan otomatis via chat jika total pengeluaran meluap melompati budget bulanan</span>
                       </div>
                       <input
@@ -567,7 +545,7 @@ export const SettingsPanel = ({
                         checked={waBotNotifyOnBudget}
                         onChange={e => setWaBotNotifyOnBudget(e.target.checked)}
                         disabled={!waBotEnabled}
-                        className="rounded text-green-500 focus:ring-green-500 cursor-pointer h-4.5 w-4.5 accent-green-650"
+                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
                       />
                     </label>
                   </div>
@@ -610,14 +588,14 @@ export const SettingsPanel = ({
                     className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-sm rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50"
                   >
                     {isResetting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    {isResetting ? "Sedang Mengosongkan..." : "Reset Semua Riwayat Keuangan"}
+                    {isResetting ? "Sedang Mengosongkan..." : "Reset Semua RiWhatsAppyat Keuangan"}
                   </button>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800">
                 <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                  *Dengan menekan tombol hapus, Anda menyetujui bahwa Kuanganku tidak bertanggung jawab atas hilangnya data catatan tabungan Anda yang tidak dicadangkan sebelumnya.
+                  *Dengan menekan tombol hapus, Anda menyetujui bahWhatsApp Kuanganku tidak bertanggung jaWhatsAppb atas hilangnya data catatan tabungan Anda yang tidak dicadangkan sebelumnya.
                 </p>
               </div>
             </div>

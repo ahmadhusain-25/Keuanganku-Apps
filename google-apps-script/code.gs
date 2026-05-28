@@ -181,7 +181,7 @@ function getAISummaryFromGemini() {
       });
     }
     
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY;
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" + GEMINI_API_KEY;
     const prompt = "Analisis data transaksi keuangan berikut dan berikan ringkasan pendek serta tips/insight finansial cerdas maksimal dalam 2 paragraf padat. Gunakan bahasa Indonesia yang bersahabat dan optimis. Data transaksi: " + JSON.stringify(transactions);
     
     const payload = {

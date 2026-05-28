@@ -14,6 +14,8 @@ interface FloatingAssistantProps {
   themeMode?: "light" | "dark" | "cosmic";
   spreadsheetName?: string;
   isGuest?: boolean;
+  isEnabled: boolean;
+  size: number;
 }
 
 export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
@@ -21,7 +23,10 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   themeMode = "light",
   spreadsheetName = "",
   isGuest = false,
+  isEnabled,
+  size,
 }) => {
+  if (!isEnabled) return null;
   const isDarkObj = themeMode === "dark" || themeMode === "cosmic";
 
   // Dragging and position state
@@ -102,7 +107,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
 
   // Drag event handlers (using pointerEvents to support mouse & touch simultaneously)
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Avoid dragging initiating on interactive buttons/scroll inside dialog
     if (isOpen && (e.target as HTMLElement).closest(".chat-dialog")) {
       return;
     }
@@ -119,7 +123,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     const dy = e.clientY - dragStart.current.y;
     totalMove.current = Math.sqrt(dx * dx + dy * dy);
 
-    // Bounding restricts
     const nextX = Math.max(10, Math.min(window.innerWidth - 85, elementStart.current.x + dx));
     const nextY = Math.max(10, Math.min(window.innerHeight - 85, elementStart.current.y + dy));
     setPosition({ x: nextX, y: nextY });
@@ -131,7 +134,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
     } catch (_) {}
 
-    // Tap/Click threshold (< 5 pixels of total drag is a click)
     if (totalMove.current < 5) {
       setIsOpen(!isOpen);
       setHasNewMessage(false);
@@ -139,11 +141,10 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   };
 
   const handleSend = async (customMessage?: string) => {
-    const textToSend = (customMessage || input).trim();
+    const textToSend = (customMessage && typeof customMessage === 'string' ? customMessage : input).trim();
     if (!textToSend) return;
 
-    // Clear input if user sent via keyboard
-    if (!customMessage) {
+    if (!customMessage || typeof customMessage !== 'string') {
       setInput("");
     }
 
@@ -152,7 +153,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     setIsLoading(true);
 
     try {
-      // Map ChatMessage elements to Gemini API content payload structure
       const apiHistory = messages.map((m) => ({
         role: m.role,
         parts: [{ text: m.text }],
@@ -198,7 +198,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     }
   };
 
-  // Preset fast questions to increase engagement and easy usage
   const presetQuestions = [
     { text: "🦉 Berikan tips pintar menabung bulan ini", label: "Tips Hemat" },
     { text: "🪙 Hitung total saldo bersih & simulasikan kelayakanku", label: "Analisis Saldo" },
@@ -220,29 +219,23 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     }
   };
 
-  // Convert markdown-ish text to basic elements safely
   const formatMarkdown = (text: string) => {
     const lines = text.split("\n");
     return lines.map((line, idx) => {
       let content = line;
-      
-      // Inline Code highlight
-      content = content.replace(/`([^`]+)`/g, '<code class="bg-[#e4ffe1] text-[#3d5e46] dark:bg-[#1f3024] dark:text-[#aefcae] px-1 py-0.5 rounded text-[11px] font-mono">$1</code>');
-      
-      // Bold syntax standard
+      content = content.replace(/`([^`]+)`/g, '<code class="bg-[#e4ffe1] text-[#3d5e46] dark:bg-[#1f3024] dark:text-[#aefcae] px-1 py-0.5 rounded text-[13px] font-mono">$1</code>');
       content = content.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-[#446d4e] dark:text-emerald-300">$1</strong>');
       content = content.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
 
-      // Check Bullet lists
       if (line.trim().startsWith("- ") || line.trim().startsWith("* ")) {
         const cleanText = content.replace(/^[-*]\s+/, "");
         return (
-          <li key={idx} className="list-disc list-inside ml-2.5 my-1 text-[11.5px] leading-relaxed" dangerouslySetInnerHTML={{ __html: cleanText }} />
+          <li key={idx} className="list-disc list-inside ml-2.5 my-1.5 text-[14px] md:text-[13px] leading-relaxed" dangerouslySetInnerHTML={{ __html: cleanText }} />
         );
       }
       
       return (
-        <p key={idx} className="min-h-[6px] my-1 text-[11.5px] leading-relaxed" dangerouslySetInnerHTML={{ __html: content }} />
+        <p key={idx} className="min-h-[8px] my-1.5 text-[14px] md:text-[13px] leading-relaxed" dangerouslySetInnerHTML={{ __html: content }} />
       );
     });
   };
@@ -254,68 +247,71 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
         position: "fixed", 
         left: `${position.x}px`, 
         top: `${position.y}px`,
-        zIndex: 9999
+        zIndex: 9999,
       }}
       className="select-none"
     >
-      {/* Floating Animated Owl Bubble Button */}
-      <div
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className={`${isOpen ? "w-14 h-14" : "w-18 h-18"} rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible touch-none active:scale-95 duration-150 ${
-          isDragging ? "scale-105 cursor-grabbing opacity-90" : "hover:scale-105 duration-300 pointer-events-auto"
-        }`}
-        style={{
-          background: isDarkObj 
-            ? "radial-gradient(circle at 30% 30%, #203527 0%, #111d16 100%)" 
-            : "linear-gradient(135deg, #e4ffe1 0%, #aed8b7 100%)",
-          border: isDarkObj ? "2.5px solid #2e4d38" : "2.5px solid #6a8d73",
+      <div 
+        style={{ 
+          transform: `scale(${isMobile ? Math.max(1.1, size * 1.15) : size})`,
+          transformOrigin: isMobile ? "center" : "center" 
         }}
       >
-        {/* Glow Ring Effects */}
-        <div className={`absolute inset-[-4px] rounded-full -z-10 animate-ping opacity-25 ${isDarkObj ? "bg-emerald-400" : "bg-[#6a8d73]"} ${isDragging || isOpen ? "hidden" : ""}`} />
-        <div className="absolute inset-0 rounded-full bg-transparent border-2 border-dashed border-emerald-400/20 group-hover:rotate-180 transition-transform duration-[6000ms] " />
+        <div
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className={`${isOpen ? "w-14 h-14" : isMobile ? "w-20 h-20" : "w-18 h-18"} rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible touch-none duration-150 ${
+            isDragging ? "scale-105 cursor-grabbing opacity-90" : "hover:scale-105 duration-300 pointer-events-auto"
+          }`}
+          style={{
+            background: isDarkObj 
+              ? "radial-gradient(circle at 30% 30%, #203527 0%, #111d16 100%)" 
+              : "linear-gradient(135deg, #e4ffe1 0%, #aed8b7 100%)",
+            border: isDarkObj ? (isMobile ? "3px solid #2e4d38" : "2.5px solid #2e4d38") : (isMobile ? "3px solid #6a8d73" : "2.5px solid #6a8d73"),
+          }}
+        >
+          <div className={`absolute inset-[-4px] rounded-full -z-10 animate-ping opacity-25 ${isDarkObj ? "bg-emerald-400" : "bg-[#6a8d73]"} ${isDragging || isOpen ? "hidden" : ""}`} />
+          <div className="absolute inset-0 rounded-full bg-transparent border-2 border-dashed border-emerald-400/20 group-hover:rotate-180 transition-transform duration-[6000ms] " />
 
-        {/* Mascot Photo/Image */}
-        <OwiLogo
-          size={isOpen ? 44 : 56}
-          className="transform transition-transform group-hover:scale-110 group-hover:-rotate-3 duration-300 animate-bobbing"
-        />
+          <OwiLogo
+            size={isOpen ? 44 : isMobile ? 68 : 56}
+            className="transform transition-transform group-hover:scale-110 group-hover:-rotate-3 duration-300 animate-bobbing"
+          />
 
-        {/* Floating Bubble Badge for New Response alerts */}
-        {hasNewMessage && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-[9px] font-black text-white animate-bounce">
-            !
-          </div>
-        )}
+          {hasNewMessage && (
+            <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black text-white animate-bounce shadow-lg">
+              !
+            </div>
+          )}
 
-        {/* Tiny Tooltip label */}
-        <div className={`absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-md shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none ${
-          isDarkObj ? "bg-[#18261e] border border-emerald-900/60 text-emerald-200" : "bg-white border border-slate-200 text-slate-700"
-        }`}>
-          Tarik Owi 🦉
+          {!isMobile && (
+            <div className={`absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-md shadow-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none ${
+              isDarkObj ? "bg-[#18261e] border border-emerald-900/60 text-emerald-200" : "bg-white border border-slate-200 text-slate-700"
+            }`}>
+              Tarik Owi 🦉
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Expanded Interactive Chat Dialog Window */}
       {isOpen && (
         <div
           data-testid="owi-chat-dialog"
           className={`chat-dialog ${isMobile ? "fixed" : "absolute"} rounded-3xl shadow-3xl flex flex-col overflow-hidden max-w-[calc(100vw-32px)] border transition-all animate-fadeIn ${
             isDarkObj 
-              ? "bg-[#121c17] text-white border-emerald-950/60" 
-              : "bg-white text-slate-800 border-slate-200"
+              ? "bg-[#121c17]/98 backdrop-blur-2xl text-white border-emerald-950/60" 
+              : "bg-white/98 backdrop-blur-2xl text-slate-800 border-slate-200"
           }`}
           style={isMobile ? {
             position: "fixed" as const,
-            left: "16px",
-            right: "16px",
-            bottom: "80px",
+            left: "14px",
+            right: "14px",
+            bottom: "100px",
             width: "auto",
-            height: "calc(100vh - 120px)",
-            maxHeight: "480px",
+            height: "calc(100vh - 160px)",
+            maxHeight: "560px",
             top: "auto",
             zIndex: 10000
           } : {
@@ -325,7 +321,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             top: position.y > window.innerHeight / 2 ? "-380px" : "0px",
           }}
         >
-          {/* Header */}
           <div 
             className="flex items-center justify-between px-4 py-3 shrink-0"
             style={{
@@ -342,12 +337,12 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-1">
-                  <h3 className={`text-xs font-black tracking-wide ${isDarkObj ? "text-emerald-300" : "text-[#4a6d52]"}`}>Owi (Owl Catat)</h3>
-                  <Sparkles className="w-3 h-3 text-[#fbbf24] animate-pulse" />
+                  <h3 className={`text-[15px] md:text-[13px] font-black tracking-wide ${isDarkObj ? "text-emerald-300" : "text-[#4a6d52]"}`}>Owi (Owl Catat)</h3>
+                  <Sparkles className="w-3.5 h-3.5 text-[#fbbf24] animate-pulse" />
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLoading ? "bg-amber-400 animate-ping" : isApiLimit ? "bg-purple-400 animate-pulse" : "bg-green-500 animate-pulse"}`} />
-                  <span className={`text-[9px] font-bold ${isDarkObj ? "text-emerald-400/80" : "text-emerald-600"}`}>
+                  <span className={`text-[11px] md:text-[10px] font-bold ${isDarkObj ? "text-emerald-400/80" : "text-emerald-600"}`}>
                     {isLoading ? "Owi sedang berpikir..." : isApiLimit ? "owi sedang tidur karena limit habis" : "Owi siap melayani"}
                   </span>
                 </div>
@@ -355,7 +350,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             </div>
             
             <div className="flex items-center gap-1">
-              {/* Clear chat history button */}
               <button
                 type="button"
                 onClick={handleResetChat}
@@ -364,10 +358,9 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
                   isDarkObj ? "text-slate-400 hover:text-emerald-300" : "text-slate-500 hover:text-red-500"
                 }`}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-4 h-4 md:w-3.5 md:h-3.5" />
               </button>
 
-              {/* Close window */}
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
@@ -375,24 +368,22 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
                   isDarkObj ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                <X className="w-4 h-4" />
+                <X className="w-4.5 h-4.5 md:w-4 md:h-4" />
               </button>
             </div>
           </div>
 
-          {/* Messages Flow Area */}
           <div className={`p-4 flex-1 overflow-y-auto scrollbar-thin space-y-3.5 ${
             isDarkObj ? "bg-[#0b120f]/60" : "bg-slate-50/45"
           }`}>
             {messages.map((m, idx) => (
               <div 
                 key={idx} 
-                className={`flex gap-2.5 max-w-[88%] ${m.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+                className={`flex gap-2.5 max-w-[90%] md:max-w-[88%] ${m.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
               >
-                {/* Profile Avatars inside chat bubbles */}
                 {m.role === "model" && (
-                  <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center select-none">
-                    <OwiLogo size={20} />
+                  <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center select-none">
+                    <OwiLogo size={isMobile ? 22 : 20} />
                   </div>
                 )}
 
@@ -400,19 +391,18 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
                   <div
                     className={`px-3 py-2.5 rounded-2xl shadow-sm ${
                       m.role === "user"
-                        ? "bg-[#6a8d73] text-white rounded-tr-none text-[11.5px]"
+                        ? "bg-[#6a8d73] text-white rounded-tr-none text-[14px] md:text-[13px]"
                         : m.isError
-                        ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-tl-none text-[11.5px]"
+                        ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 rounded-tl-none text-[14px] md:text-[13px]"
                         : isDarkObj 
-                        ? "bg-[#18261e] border border-[#203628]/60 text-slate-100 rounded-tl-none" 
+                        ? "bg-[#18261e]/90 border border-[#203628]/60 text-slate-100 rounded-tl-none" 
                         : "bg-white border border-slate-200/80 text-slate-800 rounded-tl-none"
                     }`}
                   >
-                    {m.role === "model" ? formatMarkdown(m.text) : <p className="text-[11.5px] whitespace-pre-wrap leading-relaxed font-semibold">{m.text}</p>}
+                    {m.role === "model" ? formatMarkdown(m.text) : <p className="text-[14px] md:text-[13px] whitespace-pre-wrap leading-relaxed font-semibold">{m.text}</p>}
                   </div>
                   
-                  {/* Timestamp Label */}
-                  <span className={`block text-[8px] font-medium tracking-tight mt-1 ${
+                  <span className={`block text-[10px] md:text-[9px] font-medium tracking-tight mt-1 ${
                     m.role === "user" ? "text-right opacity-70" : "opacity-60"
                   }`}>
                     {m.role === "user" ? "Anda" : "Owi"}
@@ -421,10 +411,9 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
               </div>
             ))}
 
-            {/* AI Thinking typing indicator */}
             {isLoading && (
               <div className="flex gap-2.5 max-w-[85%] mr-auto items-start">
-                <div className="w-6 h-6 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center animate-pulse">
+                <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-[#e4ffe1] dark:bg-[#1a2c21] border border-emerald-400/20 shrink-0 flex items-center justify-center animate-pulse">
                   <OwiLogo size={20} />
                 </div>
                 <div className={`px-3 py-2.5 rounded-2xl shadow-sm rounded-tl-none flex items-center gap-1.5 ${
@@ -439,7 +428,6 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             <div ref={chatEndRef} />
           </div>
 
-          {/* Quick Preset Buttons */}
           <div className={`px-3.5 py-2 overflow-x-auto shrink-0 border-t border-b flex gap-1.5 no-scrollbar ${
             isDarkObj ? "bg-[#0c1411] border-emerald-950/40" : "bg-slate-50/50 border-slate-100"
           }`}>
@@ -449,18 +437,18 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
                 type="button"
                 disabled={isLoading}
                 onClick={() => handleSend(pq.text)}
-                className={`text-[9.5px] font-bold px-3 py-1 rounded-full whitespace-nowrap transition-all flex items-center gap-1 select-none shrink-0 ${
+                className={`text-[11px] md:text-[10px] font-bold px-3 py-1.5 md:py-1 rounded-full whitespace-nowrap transition-all flex items-center gap-1 select-none shrink-0 cursor-pointer ${
                   isDarkObj
                     ? "bg-[#18261e] hover:bg-[#1f3427] border border-[#223a2a] text-emerald-100 hover:text-emerald-300 disabled:opacity-40"
                     : "bg-white hover:bg-[#f4fdd9]/50 border border-slate-200/80 text-slate-700 hover:text-emerald-700 disabled:opacity-50"
                 }`}
               >
+                <Sparkles className="w-2.5 h-2.5 text-amber-500" />
                 <span>{pq.label}</span>
               </button>
             ))}
           </div>
 
-          {/* Form input bar */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -473,8 +461,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
               value={input}
               disabled={isLoading}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Tanya Owi apa saja tentang keuangan..."
-              className={`flex-1 text-[11px] px-3.5 py-2.5 rounded-2xl outline-none transition-all ${
+              placeholder="Tanya Owi apa saja..."
+              className={`flex-1 text-[15px] md:text-[13px] px-3.5 py-3 md:py-2.5 rounded-2xl outline-none transition-all ${
                 isDarkObj
                   ? "bg-[#18261e] border border-[#2a4534] text-white focus:ring-2 focus:ring-emerald-500/50 placeholder-slate-400"
                   : "bg-slate-100 hover:bg-slate-100/80 focus:bg-white border border-transparent focus:border-slate-300 text-slate-800 focus:ring-2 focus:ring-emerald-200 placeholder-slate-500"
@@ -483,13 +471,13 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className={`p-2.5 rounded-2xl transition-all cursor-pointer flex items-center justify-center text-white font-bold disabled:opacity-40 shadow-md ${
+              className={`p-3 md:p-2.5 rounded-2xl transition-all cursor-pointer flex items-center justify-center text-white font-bold disabled:opacity-40 shadow-md ${
                 isLoading || !input.trim()
                   ? "bg-slate-400 cursor-not-allowed"
                   : "bg-[#6a8d73] hover:bg-[#5b7a62]"
               }`}
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-4 h-4 md:w-3.5 md:h-3.5" />
             </button>
           </form>
         </div>

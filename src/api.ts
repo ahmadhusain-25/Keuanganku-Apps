@@ -161,7 +161,7 @@ export const addCalendarReminder = async (summary: string, description: string, 
 
 export const sendWANotification = async (phone: string, message: string) => {
   const token = await getAccessToken();
-  const res = await fetch(getApiUrl("/api/whatsapp/notify"), {
+  const res = await fetch(getApiUrl("/api/wa/notify"), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,
@@ -169,7 +169,28 @@ export const sendWANotification = async (phone: string, message: string) => {
     },
     body: JSON.stringify({ phone, message })
   });
-  return handleResponse(res, "Failed to prepare WA notification");
+  return handleResponse(res, "Failed to send WA notification");
+};
+
+export const fetchBudget = async (spreadsheetId: string) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl(`/api/budget?spreadsheetId=${spreadsheetId}`), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return handleResponse(res, "Failed to fetch budget");
+};
+
+export const updateBudget = async (spreadsheetId: string, budget: number) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/budget"), {
+    method: "POST",
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ spreadsheetId, budget })
+  });
+  return handleResponse(res, "Failed to update budget");
 };
 
 export const getAISummary = async (transactions: Transaction[]) => {

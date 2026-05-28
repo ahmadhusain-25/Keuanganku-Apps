@@ -22,18 +22,13 @@ export const initAuth = (
 ) => {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (!cachedAccessToken) {
-        cachedAccessToken = localStorage.getItem("googleAccessToken");
-      }
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
-      localStorage.removeItem("googleAccessToken");
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -46,7 +41,6 @@ export const handleRedirectResult = async (): Promise<{ user: User; accessToken:
       const credential = GoogleAuthProvider.credentialFromResult(result);
       if (credential?.accessToken) {
         cachedAccessToken = credential.accessToken;
-        localStorage.setItem("googleAccessToken", cachedAccessToken);
         return { user: result.user, accessToken: cachedAccessToken };
       }
     }
@@ -67,7 +61,6 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
-    localStorage.setItem("googleAccessToken", cachedAccessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error("Sign in error:", error);
@@ -78,9 +71,8 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       error?.message?.indexOf("popup") !== -1 ||
       error?.message?.indexOf("blocked") !== -1
     ) {
-      console.log("Popup blocked by browser. Redirecting instead...");
-      await signInWithRedirect(auth, provider);
-      return null;
+      console.log("Popup blocked by browser. Cannot use redirect in iframe reliably.");
+      throw new Error("POPUP_BLOCKED");
     }
     throw error;
   } finally {
@@ -94,24 +86,14 @@ export const googleSignInRedirect = async (): Promise<void> => {
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (!cachedAccessToken) {
-    const stored = localStorage.getItem("googleAccessToken");
-    if (stored === "null" || stored === "undefined" || !stored) {
-      cachedAccessToken = null;
-    } else {
-      cachedAccessToken = stored;
-    }
-  }
   return cachedAccessToken;
 };
 
 export const logout = async () => {
   await auth.signOut();
   cachedAccessToken = null;
-  localStorage.removeItem("googleAccessToken");
 };
 
 export const clearAccessToken = () => {
   cachedAccessToken = null;
-  localStorage.removeItem("googleAccessToken");
 };

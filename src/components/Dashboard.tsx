@@ -11,7 +11,9 @@ import {
   resetTransactions, 
   Transaction,
   fetchUserSpreadsheets,
-  fetchAISuggestions
+  fetchAISuggestions,
+  fetchBudget,
+  updateBudget
 } from "../api";
 import { format, parseISO } from "date-fns";
 import { id } from "date-fns/locale";
@@ -47,7 +49,8 @@ import {
   ChevronRight,
   ExternalLink,
   Eye,
-  EyeOff
+  EyeOff,
+  Pencil
 } from "lucide-react";
 import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
 import { SettingsPanel } from "./SettingsPanel";
@@ -140,19 +143,24 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     }, 150);
   };
 
-  // Notifications, WA destination, DoB
+  // Notifications, WhatsApp destination, DoB
   const [reminderSummary, setReminderSummary] = useState("");
   const [reminderDate, setReminderDate] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("1269409217");
   const [savedPhones, setSavedPhones] = useState<string[]>(() => {
     const saved = localStorage.getItem("owi_saved_phones");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          if (!parsed.includes("")) {
+            return ["", ...parsed];
+          }
+          return parsed;
+        }
       } catch (e) {}
     }
-    return [];
+    return [""];
   });
 
   useEffect(() => {
@@ -202,7 +210,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     {
       id: "welcome",
       sender: "bot",
-      text: "Halo! Saya *Keuanganku* WA Bot 🤖\n\nSaya asisten robot otomatis yang siap memantau keuangan Anda. Saya akan mengirim laporan transaksi secara instan!\n\nKetik *!bantuan* untuk mendaftar perintah saya.",
+      text: "Halo! Saya *Keuanganku* WhatsApp Bot 🤖\n\nSaya asisten robot otomatis yang siap memantau keuangan Anda. Saya akan mengirim laporan transaksi secara instan!\n\nKetik *!bantuan* untuk mendaftar perintah saya.",
       timestamp: "09:00"
     }
   ]);
@@ -211,6 +219,24 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [aiSummary, setAiSummary] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
   const [copiedScript, setCopiedScript] = useState(false);
+
+  // AI Assistant configuration
+  const [isAssistantEnabled, setIsAssistantEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("owi_assistant_enabled");
+    return saved !== "false";
+  });
+  const [assistantSize, setAssistantSize] = useState<number>(() => {
+    const saved = localStorage.getItem("owi_assistant_size");
+    return saved ? Number(saved) : 1;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("owi_assistant_enabled", String(isAssistantEnabled));
+  }, [isAssistantEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("owi_assistant_size", String(assistantSize));
+  }, [assistantSize]);
 
   // Profile preferences (Default to emerald (Sage Green) & light mode)
   const [themeMode, setThemeMode] = useState<"blue" | "purple" | "emerald" | "rose" | "pink">("emerald");
@@ -279,7 +305,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     if (saved) {
       try {
         const p = JSON.parse(saved);
-        if (p.phone) setPhone(p.phone);
+        if (p.phone) {
+          setPhone(p.phone);
+        } else {
+          setPhone("");
+        }
         if (p.dob) setDob(p.dob);
         if (p.themeMode) setThemeMode(p.themeMode);
         if (p.colorMode) setColorMode(p.colorMode);
@@ -533,11 +563,28 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         const data = await fetchFinances(activeId);
         setTransactions(data.transactions);
         setSpreadsheetId(data.spreadsheetId);
+        
+        // Fetch budget
+        if (data.spreadsheetId) {
+          const budgetData = await fetchBudget(data.spreadsheetId);
+          setMonthlyBudget(budgetData.budget);
+        }
       }
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBudgetChange = async (budget: number) => {
+    if (!spreadsheetId) return;
+    try {
+      setMonthlyBudget(budget);
+      await updateBudget(spreadsheetId, budget);
+      showToast("Budget bulanan berhasil disimpan ke Google Sheets! 🪙🦉", "success");
+    } catch (e: any) {
+      showToast("Gagal menyimpan budget: " + e.message, "error");
     }
   };
 
@@ -579,7 +626,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       const lowerInput = userMsgText.trim().toLowerCase();
 
       if (lowerInput === "!bantuan" || lowerInput === "bantuan" || lowerInput === "help" || lowerInput === "/help") {
-        responseText = `🤖 *Asisten WA Keuanganku* - Daftar Perintah:\n\n` +
+        responseText = `🤖 *Asisten WhatsApp Keuanganku* - Daftar Perintah:\n\n` +
           `• *!saldo* - Cek ringkasan saldo, pemasukan, & pengeluaran aktual.\n` +
           `• *!summary* - Rekomendasi/analisis finansial dari kembaran otak AI Anda.\n` +
           `• *!tambah [income/expense] [jumlah] [kategori] [deskripsi]* - Tambah transaksi instan via chat.\n` +
@@ -676,7 +723,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         try {
           await sendWANotification(phone, responseText);
         } catch (waErr) {
-          console.error("Fonnte Real WA push error:", waErr);
+          console.error("Fonnte Real WhatsApp push error:", waErr);
         }
       }
     }, 1000);
@@ -752,8 +799,9 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             if (phone) {
               try {
                 await sendWANotification(phone, textBudget);
-              } catch (waBudgetErr) {
-                console.error("Simulation notify budget limit error: ", waBudgetErr);
+              } catch (waBudgetErr: any) {
+                console.warn("WhatsApp notification budget limit failed: ", waBudgetErr.message || waBudgetErr);
+                showToast(`Gagal mengirim pesan WhatsApp via Fonnte (Budget): ${waBudgetErr.message || "Pastikan nomor WhatsApp benar"}`, "error");
               }
             }
           }
@@ -766,8 +814,9 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
            const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
            const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${inputAmount.toLocaleString("id-ID")}\nKeterangan: ${desc}`;
            await sendWANotification(phone, msg);
-         } catch (waErr) {
-           console.error("Simulation notify hook: ", waErr);
+         } catch (waErr: any) {
+           console.warn("WhatsApp notification failed: ", waErr.message || waErr);
+           showToast(`Gagal mengirim WhatsApp via Fonnte: ${waErr.message || "Pastikan nomor WhatsApp benar"}`, "error");
          }
       }
 
@@ -1095,6 +1144,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             setWaBotNotifyOnAdd={setWaBotNotifyOnAdd}
             waBotNotifyOnBudget={waBotNotifyOnBudget}
             setWaBotNotifyOnBudget={setWaBotNotifyOnBudget}
+            isAssistantEnabled={isAssistantEnabled}
+            setIsAssistantEnabled={setIsAssistantEnabled}
+            assistantSize={assistantSize}
+            setAssistantSize={setAssistantSize}
             handleCopyAppsScript={handleCopyAppsScript}
             copiedScript={copiedScript}
             handleResetTransactions={handleResetTransactions}
@@ -1111,7 +1164,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           <BudgetDetails
             transactions={transactions}
             monthlyBudget={monthlyBudget}
-            setMonthlyBudget={setMonthlyBudget}
+            setMonthlyBudget={handleBudgetChange}
             remainingBudget={remainingBudget}
             onBack={() => setActivePage("dashboard")}
             ui={ui}
@@ -1234,29 +1287,42 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                 </div>
                 <div className="w-full md:w-72 leading-none flex flex-col justify-end text-left">
                   <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase tracking-wider`}>Budget Bulanan</label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 bottom-2 text-xs font-bold text-slate-400">Rp</span>
-                      <input 
-                        type="number" 
-                        value={isEditingBudget ? tempBudget : (monthlyBudget || "")} 
-                        onChange={e => setTempBudget(e.target.value)}
-                        disabled={!isEditingBudget}
-                        placeholder="0"
-                        className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-8 pr-2 py-1.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow disabled:opacity-75 disabled:cursor-not-allowed`}
-                      />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 bottom-2 text-xs font-bold text-slate-400">Rp</span>
+                        <input 
+                          type="number" 
+                          value={isEditingBudget ? tempBudget : (monthlyBudget || "")} 
+                          onChange={e => setTempBudget(e.target.value)}
+                          disabled={!isEditingBudget}
+                          placeholder="0"
+                          className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-8 pr-2 py-1.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow disabled:opacity-75 disabled:cursor-not-allowed`}
+                        />
+                      </div>
+                      {!isEditingBudget && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempBudget(String(monthlyBudget || ""));
+                            setIsEditingBudget(true);
+                          }}
+                          className={`p-2 rounded-xl ${isLight ? 'bg-slate-100 text-slate-500' : 'bg-white/5 text-slate-400'} hover:bg-slate-200 active:scale-95 transition-all cursor-pointer shrink-0`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {isEditingBudget ? (
-                      <div className="flex items-center gap-1 shrink-0">
+                    {isEditingBudget && (
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => {
                             const val = Number(tempBudget) || 0;
-                            setMonthlyBudget(val);
+                            handleBudgetChange(val);
                             setIsEditingBudget(false);
-                            showToast("Budget bulanan berhasil disimpan!", "success");
                           }}
-                          className="px-2.5 py-1.5 text-[10px] font-bold text-white bg-emerald-605 bg-emerald-600 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                          className="flex-1 px-2.5 py-1.5 text-[10px] font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
                         >
                           Simpan
                         </button>
@@ -1271,17 +1337,6 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                           Batal
                         </button>
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTempBudget(String(monthlyBudget || ""));
-                          setIsEditingBudget(true);
-                        }}
-                        className={`px-3 py-1.5 text-[10px] font-bold text-white ${theme.bgIcon} rounded-xl hover:opacity-90 active:scale-95 transition-all cursor-pointer shrink-0`}
-                      >
-                        Edit
-                      </button>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1292,13 +1347,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                           key={preset}
                           type="button"
                           onClick={() => {
-                            if (isEditingBudget) {
-                              setTempBudget(String(preset));
-                            } else {
-                              setMonthlyBudget(preset);
-                              setTempBudget(String(preset));
-                              showToast(`Budget bulanan berhasil diubah ke Rp ${(preset / 1000000)} Juta!`, "success");
-                            }
+                            setIsEditingBudget(true);
+                            setTempBudget(String(preset));
                           }}
                           className={`text-[9px] font-bold px-2 py-1 rounded-lg transition-all border shrink-0 cursor-pointer select-none active:scale-95 ${
                             isActive
@@ -1621,7 +1671,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         )}
                       </div>
                       
-                      {/* WA trigger toggle info */}
+                      {/* WhatsApp trigger toggle info */}
                       <div className="sm:col-span-2 flex items-center gap-2 mt-1">
                         <input 
                           type="checkbox" 
@@ -1638,7 +1688,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                       {waNotify && (
                         <div className="sm:col-span-2 space-y-2">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <label className={`block text-[10px] font-bold ${ui.textMuted} uppercase`}>Nomor WhatsApp Tujuan</label>
+                            <label className={`block text-[10px] font-bold ${ui.textMuted} uppercase`}>nomor WhatsApp Tujuan</label>
                             
                             <div className="flex gap-1.5">
                               {phone.trim() && !savedPhones.includes(phone.trim()) && (
@@ -1664,7 +1714,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                             type="tel" 
                             value={phone}
                             onChange={e => setPhone(e.target.value)}
-                            placeholder="Masukan nomor WA tanpa sandi negara, misal: 08123456789"
+                            placeholder="Masukan nomor WhatsApp Anda"
                             className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
                             required={waNotify}
                           />
@@ -1951,7 +2001,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
               </div>
 
-              {/* Right minor side: charts, AI Summary, WA simulation */}
+              {/* Right minor side: charts, AI Summary, WhatsApp simulation */}
               <div className="space-y-6">
                 
                 {/* Visual Circle Recharts pie */}
@@ -1979,16 +2029,17 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                               ))}
                             </Pie>
                             <RechartsTooltip 
-                              formatter={(value: number) => `Rp ${value.toLocaleString("id-ID")}`}
-                              contentStyle={{ 
-                                backgroundColor: ui.chartTheme.bg, 
-                                borderColor: ui.chartTheme.border, 
-                                color: ui.chartTheme.text, 
-                                borderRadius: '1rem',
-                                fontSize: '11px',
-                                fontWeight: 'bold'
+                              content={({ active, payload }) => {
+                                if (active && payload && payload.length) {
+                                  return (
+                                    <div className={`p-3 rounded-xl border shadow-xl flex flex-col gap-1 z-50`} style={{ backgroundColor: ui.chartTheme.bg, borderColor: ui.chartTheme.border, color: ui.chartTheme.text }}>
+                                      <p className="text-[10px] uppercase tracking-wider font-bold opacity-70">{payload[0].name}</p>
+                                      <p className="text-sm font-bold text-emerald-500">{`Rp ${Number(payload[0].value).toLocaleString("id-ID")}`}</p>
+                                    </div>
+                                  );
+                                }
+                                return null;
                               }}
-                              itemStyle={{ color: ui.chartTheme.text }}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -2147,6 +2198,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         transactions={transactions} 
         themeMode={colorMode} 
         isGuest={!!user?.isGuest}
+        isEnabled={isAssistantEnabled}
+        size={assistantSize}
       />
     </div>
   );
