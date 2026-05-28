@@ -8,11 +8,15 @@ import { AppLogo } from "./AppLogo";
 export const Login = ({ 
   onLogin, 
   onRedirectLogin,
-  onGuestLogin 
+  onGuestLogin,
+  loginError,
+  clearError
 }: { 
   onLogin: () => void; 
   onRedirectLogin: () => void;
   onGuestLogin: () => void;
+  loginError?: { code: string; message: string } | null;
+  clearError?: () => void;
 }) => {
   const [isIframe, setIsIframe] = useState(false);
 
@@ -59,8 +63,46 @@ export const Login = ({
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {/* Custom Error Warning if login fails */}
+          {loginError && (
+            <div 
+              className="p-4 rounded-2xl border flex flex-col gap-2.5 text-xs shadow-md bg-rose-50 border-rose-200 text-rose-900 duration-200 animate-fadeIn relative"
+            >
+              <button 
+                onClick={clearError}
+                className="absolute top-2.5 right-2.5 text-rose-400 hover:text-rose-700 font-bold text-sm w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 transition-colors"
+                title="Sembunyikan pesan"
+              >
+                ×
+              </button>
+              <div className="flex gap-2 items-start pr-4">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-500" />
+                <div className="space-y-1">
+                  <p className="font-bold text-[13px]">Gagal Masuk ({loginError.code || "Error"}):</p>
+                  <p className="leading-relaxed opacity-90 font-mono text-[10px]">
+                    {loginError.message}
+                  </p>
+                </div>
+              </div>
+              <div className="border-t border-rose-100 pt-2.5 mt-0.5 space-y-1.5 text-[11px] leading-relaxed">
+                <p className="font-semibold text-rose-800">💡 Langkah Solusi Cepat:</p>
+                <ul className="list-decimal list-inside space-y-1 text-rose-700 pl-1">
+                  <li>
+                    Klik tombol <strong>"Open in New Tab" (↗)</strong> di pojok kanan atas layar pratinjau ini untuk membebaskannya dari batasan iframe browser.
+                  </li>
+                  <li>
+                    Izinkan pop-up dan matikan Ad-blocker/pelindung privasi pelacakan sementara untuk situs ini.
+                  </li>
+                  <li>
+                    Atau, langsung klik tombol hijau <strong>"Masuk sebagai Tamu (Uji Coba)"</strong> di bawah untuk mencoba aplikasi secara offline tanpa akun.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* Custom Informative Warning for iFrame Sandbox restrictions if active */}
-          {isIframe && (
+          {isIframe && !loginError && (
             <div 
               className="p-4 rounded-2xl border flex gap-3 text-xs shadow-sm transition-all animate-pulse"
               style={{ 

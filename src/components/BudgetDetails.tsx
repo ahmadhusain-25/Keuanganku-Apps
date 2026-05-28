@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "motion/react";
 import { 
   ArrowLeft, 
@@ -33,6 +33,9 @@ interface BudgetDetailsProps {
   theme: any;
   isLight: boolean;
   themeMode: string;
+  showToast?: (message: string, type: "success" | "error" | "info") => void;
+  onDeleteTransaction?: (id: string | undefined) => void;
+  deletingId?: string | null;
 }
 
 export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
@@ -44,11 +47,23 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
   ui,
   theme,
   isLight,
-  themeMode
+  themeMode,
+  showToast,
+  onDeleteTransaction,
+  deletingId
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<"all" | "Income" | "Expense">("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempBudget, setTempBudget] = useState(String(monthlyBudget));
+  const [justSaved, setJustSaved] = useState(false);
+  const [activeDeleteId, setActiveDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTempBudget(String(monthlyBudget));
+  }, [monthlyBudget]);
 
   // Sum total income & expense
   const totalIncome = useMemo(() => {
@@ -109,7 +124,7 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
   }, [transactions, totalExpense]);
 
   // Quick budget presets
-  const budgetPresets = [1000000, 2000000, 5000000, 10000000];
+  const budgetPresets = [1000000, 2000000, 3000000, 5000000];
 
   return (
     <motion.div 
@@ -239,16 +254,73 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
           </div>
 
           <div className="space-y-4">
-            <div className="relative">
-              <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-              <input 
-                type="number" 
-                value={monthlyBudget || ""} 
-                onChange={e => setMonthlyBudget(Number(e.target.value))}
-                placeholder="Ex: 5000000"
-                className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-9 pr-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
-              />
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">Rp</span>
+                <input 
+                  type="number" 
+                  value={isEditing ? tempBudget : (monthlyBudget || "")} 
+                  onChange={e => setTempBudget(e.target.value)}
+                  disabled={!isEditing}
+                  placeholder="Ex: 5000000"
+                  className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-9 pr-3.5 py-2.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow disabled:opacity-75 disabled:cursor-not-allowed`}
+                />
+              </div>
+              {isEditing ? (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = Number(tempBudget) || 0;
+                      setMonthlyBudget(val);
+                      setIsEditing(false);
+                      setJustSaved(true);
+                      showToast?.("Budget bulanan berhasil disimpan! 🪙🦉", "success");
+                      setTimeout(() => setJustSaved(false), 3000);
+                    }}
+                    className="px-3 py-2.5 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    Simpan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempBudget(String(monthlyBudget));
+                      setIsEditing(false);
+                    }}
+                    className={`px-3 py-2.5 text-xs font-bold ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200' : 'bg-white/5 hover:bg-white/10 text-slate-300'} rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap`}
+                  >
+                    Batal
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempBudget(String(monthlyBudget || ""));
+                    setIsEditing(true);
+                  }}
+                  className={`px-4 py-2.5 text-xs font-bold text-white ${theme.bgIcon} rounded-xl hover:opacity-90 active:scale-95 transition-all cursor-pointer shrink-0`}
+                >
+                  Edit
+                </button>
+              )}
             </div>
+
+            {/* Custom state animation: Success toast if saved */}
+            {justSaved && (
+              <motion.div 
+                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold rounded-xl flex items-center gap-2"
+              >
+                <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <span className="text-emerald-500 text-xs font-black">✓</span>
+                </div>
+                <span>Tersimpan! Batas baru: Rp {monthlyBudget.toLocaleString("id-ID")}</span>
+              </motion.div>
+            )}
 
             {/* Quick Presets Selection */}
             <div className="space-y-1.5">
@@ -258,11 +330,15 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
                   <button
                     type="button"
                     key={preset}
-                    onClick={() => setMonthlyBudget(preset)}
-                    className={`text-[10px] py-1.5 px-2 rounded-lg font-bold transition-all border cursor-pointer select-none text-center ${
-                      monthlyBudget === preset
+                    onClick={() => {
+                      if (!isEditing) return;
+                      setTempBudget(String(preset));
+                    }}
+                    disabled={!isEditing}
+                    className={`text-[10px] py-1.5 px-2 rounded-lg font-bold transition-all border text-center cursor-pointer select-none ${
+                      (!isEditing ? monthlyBudget === preset : Number(tempBudget) === preset)
                         ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold"
-                        : `${ui.panelBg} hover:border-slate-300 dark:hover:border-slate-700 text-slate-500 dark:text-slate-400`
+                        : `${ui.panelBg} hover:border-slate-300 dark:hover:border-slate-700 text-slate-500 dark:text-slate-400 disabled:opacity-40 disabled:cursor-not-allowed`
                     }`}
                   >
                     Rp {(preset / 1000000)} Juta
@@ -275,7 +351,7 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
           {/* Sisa Anggaran Note */}
           <div className={`p-3 rounded-2xl border text-[11px] leading-relaxed text-left ${isLight ? 'bg-amber-500/5 border-amber-500/15 text-amber-800' : 'bg-amber-500/5 border-amber-500/10 text-amber-400'}`}>
             <span className="font-bold flex items-center gap-1.5 mb-0.5">
-              <Info className="w-3.5 h-3.5" /> Tips Owi AI Owl 🦉
+              <Info className="w-3.5 h-3.5" /> Tips Cerdas Keuangan 🦉
             </span>
             Kunci penghematan cerdas adalah menetapkan budget bulanan sebesar 70% dari perkiraan pendapatan bersih, sisa 30% alokasikan langsung ke tabungan/investasi.
           </div>
@@ -479,42 +555,108 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
                 Tidak ada riwayat transaksi yang cocok dengan filter Anda.
               </div>
             ) : (
-              filteredList.slice().reverse().map((t, index) => (
-                <div 
-                  key={t.id || index} 
-                  className={`flex items-center gap-3.5 p-3 rounded-2xl border transition-colors hover:bg-slate-500/5 ${isLight ? 'border-slate-100 bg-white shadow-sm/30' : 'border-white/5 bg-slate-900/10'}`}
-                >
-                  {/* Indicator Icon */}
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                    t.type === 'Income' 
-                      ? 'bg-green-500/10 text-green-500' 
-                      : 'bg-red-500/10 text-red-500'
-                  }`}>
-                    {t.type === 'Income' ? (
-                      <TrendingUp className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-red-500" />
-                    )}
-                  </div>
-
-                  {/* Description & metadata */}
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className={`text-xs font-bold ${ui.textMain} truncate`}>{t.description}</p>
-                    <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400 font-semibold">
-                      <span className={`px-2 py-0.5 rounded bg-slate-500/10 text-[9px] font-extrabold uppercase`}>
-                        {t.category}
-                      </span>
-                      <span>•</span>
-                      <span>{t.date ? format(new Date(t.date), 'dd MMMM yyyy', { locale: id }) : ""}</span>
+              filteredList.slice().reverse().map((t, index) => {
+                const itemKey = t.id || String(index);
+                const isSlidOpen = activeDeleteId === itemKey;
+                return (
+                  <div key={itemKey} className="relative overflow-hidden rounded-2xl">
+                    {/* Background action - Delete button */}
+                    <div className="absolute right-0 top-0 bottom-0 w-16 bg-red-650 bg-red-600 flex items-center justify-center">
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onDeleteTransaction) {
+                            onDeleteTransaction(t.id);
+                          }
+                        }}
+                        disabled={deletingId === t.id}
+                        className="w-full h-full flex flex-col items-center justify-center text-white hover:bg-red-700 transition-all select-none cursor-pointer"
+                        title="Hapus"
+                      >
+                        {deletingId === t.id ? (
+                          <span className="animate-spin text-xs font-black">↻</span>
+                        ) : (
+                          <>
+                            <Trash2 className="w-4 h-4" />
+                            <span className="text-[9px] font-bold mt-1 uppercase">Hapus</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                  </div>
 
-                  {/* Amount Rupiah */}
-                  <div className={`font-mono text-xs font-black text-right shrink-0 ${t.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                    {t.type === 'Income' ? '+' : '-'} Rp {t.amount.toLocaleString("id-ID")}
+                    {/* Swipeable Foreground item */}
+                    <motion.div 
+                      drag="x"
+                      dragDirectionLock
+                      dragConstraints={{ left: -64, right: 0 }}
+                      dragElastic={0.15}
+                      onDragEnd={(event, info) => {
+                        if (info.offset.x < -20) {
+                          setActiveDeleteId(itemKey);
+                        } else if (info.offset.x > 20) {
+                          setActiveDeleteId(null);
+                        }
+                      }}
+                      animate={{ x: isSlidOpen ? -64 : 0 }}
+                      transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                      onClick={() => {
+                        setActiveDeleteId(isSlidOpen ? null : itemKey);
+                      }}
+                      className={`flex items-center gap-3.5 p-3 rounded-2xl border transition-colors relative z-10 cursor-pointer select-none ${
+                        isLight 
+                          ? 'border-slate-100 bg-white shadow-sm/30 hover:bg-slate-50' 
+                          : 'border-white/5 bg-slate-900/10 hover:bg-slate-900/20'
+                      }`}
+                    >
+                      {/* Indicator Icon */}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                        t.type === 'Income' 
+                          ? 'bg-green-500/10 text-green-500' 
+                          : 'bg-red-500/10 text-red-500'
+                      }`}>
+                        {t.type === 'Income' ? (
+                          <TrendingUp className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-500" />
+                        )}
+                      </div>
+
+                      {/* Description & metadata */}
+                      <div className="flex-1 min-w-0 text-left pointer-events-none">
+                        <p className={`text-xs font-bold ${ui.textMain} truncate`}>{t.description}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400 font-semibold">
+                          <span className={`px-2 py-0.5 rounded bg-slate-500/10 text-[9px] font-extrabold uppercase`}>
+                            {t.category}
+                          </span>
+                          <span>•</span>
+                          <span>{t.date ? format(new Date(t.date), 'dd MMMM yyyy', { locale: id }) : ""}</span>
+                        </div>
+                      </div>
+
+                      {/* Amount Rupiah */}
+                      <div className={`font-mono text-xs font-black text-right shrink-0 pointer-events-none ${t.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                        {t.type === 'Income' ? '+' : '-'} Rp {t.amount.toLocaleString("id-ID")}
+                      </div>
+
+                      <div className="shrink-0 text-slate-400 opacity-60 pointer-events-none">
+                        <motion.div
+                          animate={{ rotate: isSlidOpen ? 180 : 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          {isSlidOpen ? (
+                            <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </motion.div>
+                      </div>
+                    </motion.div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { AppLogo } from "./AppLogo";
 import { 
   fetchFinances, 
@@ -79,8 +80,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   useEffect(() => {
+    // Clear previous suggestions immediately to let default category suggestions load instantly
+    setAiSuggestions([]);
+
     if (category === "Parkir" && type === "Expense") {
-      setAiSuggestions([]);
       return;
     }
 
@@ -216,6 +219,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [customName, setCustomName] = useState(user?.displayName || "");
   const [customPhoto, setCustomPhoto] = useState(user?.photoURL || "");
   const [monthlyBudget, setMonthlyBudget] = useState(0); // 0 default
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [tempBudget, setTempBudget] = useState("0");
+  const [activeDeleteId, setActiveDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTempBudget(String(monthlyBudget));
+  }, [monthlyBudget]);
   const [showBalance, setShowBalance] = useState<boolean>(() => {
     const saved = localStorage.getItem("owi_show_balance");
     return saved !== "false";
@@ -264,7 +274,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   }, [toast]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("userProfile");
+    const profileKey = user?.isGuest ? "guestProfile" : "userProfile";
+    const saved = localStorage.getItem(profileKey);
     if (saved) {
       try {
         const p = JSON.parse(saved);
@@ -275,14 +286,23 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         if (p.designStyle) setDesignStyle(p.designStyle);
         if (p.customName) setCustomName(p.customName);
         if (p.customPhoto) setCustomPhoto(p.customPhoto);
-        if (p.monthlyBudget !== undefined && p.monthlyBudget !== null) setMonthlyBudget(Number(p.monthlyBudget));
+        if (p.monthlyBudget !== undefined && p.monthlyBudget !== null) {
+          setMonthlyBudget(Number(p.monthlyBudget));
+        } else if (user?.isGuest) {
+          setMonthlyBudget(0);
+        }
       } catch (e) {}
+    } else {
+      if (user?.isGuest) {
+        setMonthlyBudget(0);
+      }
     }
-  }, []);
+  }, [user?.isGuest]);
 
   useEffect(() => {
-    localStorage.setItem("userProfile", JSON.stringify({ phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget }));
-  }, [phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget]);
+    const profileKey = user?.isGuest ? "guestProfile" : "userProfile";
+    localStorage.setItem(profileKey, JSON.stringify({ phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget }));
+  }, [phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget, user?.isGuest]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -855,7 +875,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const totalIncome = filteredTransactions.filter(t => t.type === "Income").reduce((sum, t) => sum + t.amount, 0);
   const totalExpense = filteredTransactions.filter(t => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0);
   const balance = totalIncome - totalExpense;
-  const remainingBudget = monthlyBudget - totalExpense;
+  const remainingBudget = monthlyBudget > 0 ? (monthlyBudget - totalExpense) : 0;
   const budgetPercent = monthlyBudget > 0 ? (totalExpense / monthlyBudget) * 100 : 0;
 
   const expensesByCategory = filteredTransactions
@@ -1098,6 +1118,9 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             theme={theme}
             isLight={isLight}
             themeMode={themeMode}
+            showToast={showToast}
+            onDeleteTransaction={handleDeleteTransaction}
+            deletingId={deletingId}
           />
         ) : (
           <>
@@ -1209,17 +1232,84 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     ></div>
                   </div>
                 </div>
-                <div className="w-full md:w-56 leading-none">
-                  <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase tracking-wider`}>Set Budget Bulanan</label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-                    <input 
-                      type="number" 
-                      value={monthlyBudget || ""} 
-                      onChange={e => setMonthlyBudget(Number(e.target.value))}
-                      placeholder="0"
-                      className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-9 pr-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
-                    />
+                <div className="w-full md:w-72 leading-none flex flex-col justify-end text-left">
+                  <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase tracking-wider`}>Budget Bulanan</label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 bottom-2 text-xs font-bold text-slate-400">Rp</span>
+                      <input 
+                        type="number" 
+                        value={isEditingBudget ? tempBudget : (monthlyBudget || "")} 
+                        onChange={e => setTempBudget(e.target.value)}
+                        disabled={!isEditingBudget}
+                        placeholder="0"
+                        className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-8 pr-2 py-1.5 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow disabled:opacity-75 disabled:cursor-not-allowed`}
+                      />
+                    </div>
+                    {isEditingBudget ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = Number(tempBudget) || 0;
+                            setMonthlyBudget(val);
+                            setIsEditingBudget(false);
+                            showToast("Budget bulanan berhasil disimpan!", "success");
+                          }}
+                          className="px-2.5 py-1.5 text-[10px] font-bold text-white bg-emerald-605 bg-emerald-600 rounded-xl hover:bg-emerald-700 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+                        >
+                          Simpan
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTempBudget(String(monthlyBudget));
+                            setIsEditingBudget(false);
+                          }}
+                          className={`px-2 py-1.5 text-[10px] font-bold ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200' : 'bg-white/5 hover:bg-white/10 text-slate-300'} rounded-xl active:scale-95 transition-all cursor-pointer whitespace-nowrap`}
+                        >
+                          Batal
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTempBudget(String(monthlyBudget || ""));
+                          setIsEditingBudget(true);
+                        }}
+                        className={`px-3 py-1.5 text-[10px] font-bold text-white ${theme.bgIcon} rounded-xl hover:opacity-90 active:scale-95 transition-all cursor-pointer shrink-0`}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    {[1000000, 2000000, 3000000, 5000000].map((preset) => {
+                      const isActive = isEditingBudget ? Number(tempBudget) === preset : monthlyBudget === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            if (isEditingBudget) {
+                              setTempBudget(String(preset));
+                            } else {
+                              setMonthlyBudget(preset);
+                              setTempBudget(String(preset));
+                              showToast(`Budget bulanan berhasil diubah ke Rp ${(preset / 1000000)} Juta!`, "success");
+                            }
+                          }}
+                          className={`text-[9px] font-bold px-2 py-1 rounded-lg transition-all border shrink-0 cursor-pointer select-none active:scale-95 ${
+                            isActive
+                              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold"
+                              : `${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 border-slate-200' : 'bg-white/5 border-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200'}`
+                          }`}
+                        >
+                          {preset / 1000000} Jt
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </section>
@@ -1478,7 +1568,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         ) : (
                           <div className="mt-2 text-left animate-fadeIn">
                             <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1 flex items-center gap-1.5`}>
-                              Saran Keterangan (Owi AI🦉):
+                              Saran Keterangan:
                               {loadingSuggestions && (
                                 <span className="inline-block w-2.5 h-2.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></span>
                               )}
@@ -1488,12 +1578,24 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                                 const suggestionsToShow = aiSuggestions.length > 0
                                   ? aiSuggestions
                                   : (() => {
-                                      const defaultSuggestions = type === "Income" 
-                                        ? ["Gaji Bulanan", "Bonus Kerja", "Hasil Investasi", "Uang Saku"]
-                                        : ["Makan Siang", "Beli Bensin", "Belanja Bulanan", "Gojek/Grab", "Bayar Listrik", "Jajan Sore"];
+                                      let defaultSuggestions: string[] = [];
+                                      if (type === "Income") {
+                                        if (category === "Investasi") defaultSuggestions = ["Dividen Saham", "Kupon Obligasi", "Profit Crypto", "Bunga Deposito"];
+                                        else if (category === "Bonus") defaultSuggestions = ["Bonus Akhir Tahun", "Tunjangan Hari Raya (THR)", "Insentif Proyek"];
+                                        else if (category === "Keuntungan") defaultSuggestions = ["Hasil Dagang", "Komisi Penjualan", "Titip Jual", "Keuntungan Bisnis"];
+                                        else defaultSuggestions = ["Gaji Utama", "Gaji Pokok", "Lemburan", "Rapel Gaji"];
+                                      } else {
+                                        if (category === "Makanan") defaultSuggestions = ["Beli Makan Siang", "Kopi Susu Sore", "Jajan Cemilan", "Makan Malam", "Belanja Sayur"];
+                                        else if (category === "Transportasi") defaultSuggestions = ["Isi Bensin", "Ojek Online", "Gojek Pulang", "Tarif Tol", "Tiket KRL", "Service Motor"];
+                                        else if (category === "Belanja") defaultSuggestions = ["Baju Baru", "Belanja Bulanan", "Keperluan Dapur", "Skincare", "Sepatu Baru"];
+                                        else if (category === "Tagihan") defaultSuggestions = ["Bayar Listrik PLN", "Tagihan internet WiFi", "Pulsa HP", "Biaya Kost", "Iuran Sampah"];
+                                        else if (category === "Hiburan") defaultSuggestions = ["Tiket Bioskop", "Langganan Netflix", "Main Games", "Nongkrong Cafe", "Konser Musik"];
+                                        else if (category === "Kesehatan") defaultSuggestions = ["Beli Obat", "Vitamin C", "Konsultasi Dokter", "Masker Medis", "Cek Darah"];
+                                        else defaultSuggestions = ["Makan Siang", "Beli Bensin", "Belanja Bulanan", "Gojek/Grab", "Bayar Listrik", "Jajan Sore"];
+                                      }
                                       const historySuggestions: string[] = Array.from(new Set(
                                         transactions
-                                          .filter(t => t.type === type && t.description && t.description.trim())
+                                          .filter(t => t.type === type && t.category === category && t.description && t.description.trim())
                                           .map(t => t.description.trim())
                                       ));
                                       return Array.from(new Set([...historySuggestions, ...defaultSuggestions])).slice(0, 8);
@@ -1739,45 +1841,101 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                   </div>
 
                   <div className="space-y-3.5 flex-1 max-h-[460px] overflow-y-auto scrollbar-thin">
-                    {filteredTransactions.slice().reverse().map((t, idx) => (
-                      <div 
-                        key={t.id || idx} 
-                        className={`flex items-center gap-3.5 ${isLight ? 'hover:bg-slate-50/70 border-slate-100' : 'hover:bg-white/2 border-white/2'} p-2 rounded-2xl border transition-colors group relative`}
-                      >
-                        <div className={`w-9.5 h-9.5 rounded-full flex items-center justify-center shrink-0 ${
-                          t.type === 'Income' 
-                            ? 'bg-green-500/10 text-green-500' 
-                            : 'bg-red-500/10 text-red-500'
-                        }`}>
-                          {t.type === 'Income' ? (
-                            <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                            </svg>
-                          )}
+                    {filteredTransactions.slice().reverse().map((t, idx) => {
+                      const itemKey = t.id || String(idx);
+                      const isSlidOpen = activeDeleteId === itemKey;
+                      return (
+                        <div key={itemKey} className="relative overflow-hidden rounded-2xl">
+                          {/* Background action - Delete button */}
+                          <div className="absolute right-0 top-0 bottom-0 w-16 bg-red-650 bg-red-600 flex items-center justify-center">
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTransaction(t.id);
+                              }}
+                              disabled={deletingId === t.id}
+                              className="w-full h-full flex flex-col items-center justify-center text-white hover:bg-red-700 transition-all select-none cursor-pointer"
+                              title="Hapus"
+                            >
+                              {deletingId === t.id ? (
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <Trash2 className="w-4 h-4" />
+                                  <span className="text-[9px] font-bold mt-1 uppercase">Hapus</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Swipeable Foreground item */}
+                          <motion.div 
+                            drag="x"
+                            dragDirectionLock
+                            dragConstraints={{ left: -64, right: 0 }}
+                            dragElastic={0.15}
+                            onDragEnd={(event, info) => {
+                              if (info.offset.x < -20) {
+                                setActiveDeleteId(itemKey);
+                              } else if (info.offset.x > 20) {
+                                setActiveDeleteId(null);
+                              }
+                            }}
+                            animate={{ x: isSlidOpen ? -64 : 0 }}
+                            transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                            onClick={() => {
+                              setActiveDeleteId(isSlidOpen ? null : itemKey);
+                            }}
+                            className={`flex items-center gap-3.5 p-3 rounded-2xl border transition-colors relative z-10 cursor-pointer select-none ${
+                              isLight 
+                                ? 'bg-white border-slate-100 hover:bg-slate-50' 
+                                : 'bg-[#0e1713] border-emerald-950/40 hover:bg-emerald-950/20'
+                            }`}
+                          >
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                              t.type === 'Income' 
+                                ? 'bg-green-500/10 text-green-500' 
+                                : 'bg-red-500/10 text-red-500'
+                            }`}>
+                              {t.type === 'Income' ? (
+                                <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 pointer-events-none text-left">
+                              <p className={`text-xs font-bold ${ui.textMain} truncate`}>{t.description}</p>
+                              <p className={`text-[10px] ${ui.textMuted} font-semibold mt-0.5`}>
+                                {t.category} • {t.date ? format(new Date(t.date), 'dd MMM yyyy', { locale: id }) : ""}
+                              </p>
+                            </div>
+                            <div className={`font-mono text-xs font-bold text-right shrink-0 pointer-events-none ${t.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                              {t.type === 'Income' ? '+' : '-'} Rp {t.amount.toLocaleString("id-ID")}
+                            </div>
+
+                            <div className="shrink-0 text-slate-400 opacity-60 pointer-events-none">
+                              <motion.div
+                                animate={{ rotate: isSlidOpen ? 180 : 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                {isSlidOpen ? (
+                                  <svg className="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </motion.div>
+                            </div>
+                          </motion.div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs font-bold ${ui.textMain} truncate`}>{t.description}</p>
-                          <p className={`text-[10px] ${ui.textMuted} font-semibold mt-0.5`}>
-                            {t.category} • {t.date ? format(new Date(t.date), 'dd MMM yyyy', { locale: id }) : ""}
-                          </p>
-                        </div>
-                        <div className={`font-mono text-xs font-bold text-right shrink-0 ${t.type === 'Income' ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                          {t.type === 'Income' ? '+' : '-'} Rp {t.amount.toLocaleString("id-ID")}
-                        </div>
-                        <button 
-                          onClick={() => handleDeleteTransaction(t.id)}
-                          disabled={deletingId === t.id}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-all focus:opacity-100 outline-none shrink-0"
-                          title="Hapus baris catatan"
-                        >
-                          {deletingId === t.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                     
                     {transactions.length === 0 && !loading && (
                       <div className={`text-center py-10 ${ui.textMuted} text-xs font-semibold`}>Belum ada riwayat transaksi terinput.</div>

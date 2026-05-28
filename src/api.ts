@@ -217,7 +217,7 @@ export const sendAIChatMessage = async (
     },
     body: JSON.stringify({ message, history, transactions })
   });
-  return handleResponse(res, "Failed to get response from Owi AI Chat");
+  return handleResponse(res, "Failed to get response from Owi Chat");
 };
 
 export const fetchAISuggestions = async (category: string, type: string) => {

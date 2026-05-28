@@ -33,6 +33,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const [isApiLimit, setIsApiLimit] = useState(false);
 
   const dragStart = useRef({ x: 0, y: 0 });
   const elementStart = useRef({ x: 0, y: 0 });
@@ -158,20 +159,40 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
       }));
 
       const res = await sendAIChatMessage(textToSend, apiHistory, transactions);
+      setIsApiLimit(false);
       
       setMessages((prev) => [
         ...prev,
         { role: "model", text: res.text || "🦉 Maaf Teman Catat, aku tidak menangkap maksudmu. Coba tanyakan hal lain ya!" },
       ]);
     } catch (e: any) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "model",
-          text: "🦉 Aduh, sepertinya kepakkan sayapku terhambat masalah jaringan! Silakan dicoba lagi beberapa saat ya, Teman Catat.",
-          isError: true,
-        },
-      ]);
+      console.error("AI Error:", e);
+      const isLimitError = e && (
+        String(e.message || "").toLowerCase().includes("quota") ||
+        String(e.message || "").toLowerCase().includes("429") ||
+        String(e.message || "").toLowerCase().includes("limit") ||
+        String(e.message || "").toLowerCase().includes("exhausted")
+      );
+      if (isLimitError) {
+        setIsApiLimit(true);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "model",
+            text: "🦉 Zzz... Aku sedang tidur karena kuota limit habis, Teman Catat. Silakan coba hubungi aku lagi nanti ya! 💤💤",
+            isError: true,
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "model",
+            text: "🦉 Aduh, sepertinya kepakkan sayapku terhambat masalah jaringan! Silakan dicoba lagi beberapa saat ya, Teman Catat.",
+            isError: true,
+          },
+        ]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -193,6 +214,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
           text: "Halo Teman Catat! 🦉 Aku adalah **Owi**, asisten keuangan pribadi pintarmu. \n\nKamu bisa bertanya tentang kondisi keuanganmu saat ini, tips menghemat pengeluaran, menyusun anggaran bulanan, atau sekadar berkonsultasi tentang cara mengelola uang dengan cerdas! \n\nApa yang ingin kamu tanyakan hari ini? 🪙✨",
         },
       ];
+      setIsApiLimit(false);
       setMessages(defaultGreeting);
       localStorage.setItem("owi_assistant_chat", JSON.stringify(defaultGreeting));
     }
@@ -316,7 +338,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center relative">
                 <OwiLogo size={28} />
-                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-green-500 border border-white" />
+                <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${isApiLimit ? "bg-purple-500" : "bg-green-500"}`} />
               </div>
               <div>
                 <div className="flex items-center gap-1">
@@ -324,9 +346,9 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
                   <Sparkles className="w-3 h-3 text-[#fbbf24] animate-pulse" />
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLoading ? "bg-amber-400 animate-ping" : "bg-green-500 animate-pulse"}`} />
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${isLoading ? "bg-amber-400 animate-ping" : isApiLimit ? "bg-purple-400 animate-pulse" : "bg-green-500 animate-pulse"}`} />
                   <span className={`text-[9px] font-bold ${isDarkObj ? "text-emerald-400/80" : "text-emerald-600"}`}>
-                    {isLoading ? "Owi sedang berpikir..." : "Owi siap melayani"}
+                    {isLoading ? "Owi sedang berpikir..." : isApiLimit ? "owi sedang tidur karena limit habis" : "Owi siap melayani"}
                   </span>
                 </div>
               </div>

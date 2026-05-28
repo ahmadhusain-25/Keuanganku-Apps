@@ -7,6 +7,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [needsAuth, setNeedsAuth] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [loginError, setLoginError] = useState<{ code: string; message: string } | null>(null);
 
   useEffect(() => {
     const isGuest = localStorage.getItem("isGuestSession") === "true";
@@ -66,6 +67,7 @@ export default function App() {
   }, []);
 
   const handleLogin = async () => {
+    setLoginError(null);
     try {
       localStorage.removeItem("isGuestSession");
       const res = await googleSignIn();
@@ -79,37 +81,18 @@ export default function App() {
       const errorCode = e?.code || "";
       const errorMessage = e?.message || "";
       
-      let msg = `Gagal login dengan Google.\n\nDetail Error: [${errorCode}] ${errorMessage}\n\n`;
-      
-      if (errorCode === "auth/unauthorized-domain") {
-        msg += "⚠️ DOMAIN BELUM DIAUTORISASI DI FIREBASE:\n" +
-               "Silakan tambahkan domain aplikasi ini ke daftar 'Authorized Domains' di Firebase Console agar Google Sign-In dapat berfungsi:\n\n" +
-               "1. Buka Firebase Console (https://console.firebase.google.com/)\n" +
-               "2. Pilih proyek Anda -> Masuk ke menu 'Authentication' di bilah samping.\n" +
-               "3. Klik tab 'Settings' -> pilih 'Authorized Domains'.\n" +
-               "4. Klik 'Add Domain' lalu tambahkan domain berikut:\n" +
-               `   👉 ${window.location.hostname}\n\n` +
-               "Setelah ditambahkan, silakan coba login kembali.";
-      } else if (isIframe) {
-        msg += "⚠️ MASALAH BROWSER / IFRAME:\n" +
-               "Browser membatasi cookie pihak ketiga di dalam iframe panel pratinjau AI Studio.\n\n" +
-               "Solusi:\n" +
-               "Silakan klik ikon 'Open in New Tab' (↗) di pojok kanan atas pratinjau untuk membuka aplikasi di tab baru, kemudian coba login dari sana.";
-      } else {
-        msg += "Pastikan izin popup browser Anda diaktifkan, koneksi internet stabil, atau gunakan tombol 'Masuk dengan metode Alt/Redirect' dibawah.";
-      }
-      
-      alert(msg);
+      setLoginError({ code: errorCode, message: errorMessage });
     }
   };
 
   const handleRedirectLogin = async () => {
+    setLoginError(null);
     try {
       localStorage.removeItem("isGuestSession");
       await googleSignInRedirect();
     } catch (e: any) {
       console.error("Redirect sign in error:", e);
-      alert(`Gagal login via Redirect: ${e?.message || e}`);
+      setLoginError({ code: e?.code || "auth/redirect-error", message: e?.message || String(e) });
     }
   };
 
@@ -148,7 +131,15 @@ export default function App() {
   }
 
   if (needsAuth) {
-    return <Login onLogin={handleLogin} onRedirectLogin={handleRedirectLogin} onGuestLogin={handleGuestLogin} />;
+    return (
+      <Login 
+        onLogin={handleLogin} 
+        onRedirectLogin={handleRedirectLogin} 
+        onGuestLogin={handleGuestLogin} 
+        loginError={loginError}
+        clearError={() => setLoginError(null)}
+      />
+    );
   }
 
   return <Dashboard user={user} onLogout={handleLogout} />;
