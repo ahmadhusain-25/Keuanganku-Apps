@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { X, Send, Sparkles, MessageCircle, RotateCcw, AlertTriangle } from "lucide-react";
-import { sendAIChatMessage, Transaction } from "../api";
+import { sendAIChatMessage, sendAIChatMessageStream, Transaction } from "../api";
 import { OwiLogo } from "./OwiLogo";
 
 interface ChatMessage {
@@ -152,21 +152,44 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     setMessages((prev) => [...prev, newUserMessage]);
     setIsLoading(true);
 
+    let fullText = "";
+    // placeholder for model response that will be filled by chunks
+    setMessages((prev) => [...prev, { role: "model", text: "" }]);
+
     try {
       const apiHistory = messages.map((m) => ({
         role: m.role,
         parts: [{ text: m.text }],
       }));
 
-      const res = await sendAIChatMessage(textToSend, apiHistory, transactions);
-      setIsApiLimit(false);
-      
-      setMessages((prev) => [
-        ...prev,
-        { role: "model", text: res.text || "🦉 Maaf Teman Catat, aku tidak menangkap maksudmu. Coba tanyakan hal lain ya!" },
-      ]);
+      await sendAIChatMessageStream(textToSend, apiHistory, transactions, (chunk) => {
+        setIsLoading(false);
+        setIsApiLimit(false);
+        fullText += chunk;
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg.role === "model") {
+            lastMsg.text = fullText;
+          }
+          return newMessages;
+        });
+      });
+
+      if (!fullText) {
+        throw new Error("Empty response from AI");
+      }
     } catch (e: any) {
       console.error("AI Error:", e);
+      // Remove the last empty model message if it exists and we haven't received anything
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last.role === "model" && !last.text) {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
+
       const isLimitError = e && (
         String(e.message || "").toLowerCase().includes("quota") ||
         String(e.message || "").toLowerCase().includes("429") ||

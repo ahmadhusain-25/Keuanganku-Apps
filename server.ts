@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import OpenAI from "openai";
 
 const PORT = 3000;
@@ -776,8 +776,9 @@ async function startServer() {
         })) : [{ parts: [{ text: params.prompt }] }];
         
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-3.1-flash-lite",
           contents: contents,
+          config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
         });
         
         console.log(`[Owi AI] Successfully generated content using Gemini`);
@@ -882,6 +883,92 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
       res.json({ text });
     } catch (e: any) {
       res.json({ text: getLocalOwiChat(message, transactions) });
+    }
+  });
+
+  // AI Chat Assistant (Streaming)
+  app.post("/api/ai/chat/stream", async (req, res) => {
+    const { message, history = [], transactions = [] } = req.body;
+    
+    // Set headers for SSE
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const sendChunk = (data: any) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      if (!hasAI) {
+        sendChunk({ text: getLocalOwiChat(message, transactions), done: true });
+        return res.end();
+      }
+
+      const systemInstruction = `Anda adalah "Owi", burung hantu pintar yang lucu, bijaksana, dan sangat ramah yang bertindak sebagai Asisten Keuangan Pribadi di aplikasi Keuanganku.
+Karakter Anda:
+- Sangat ahli dalam manajemen keuangan, rencana anggaran, strategi menabung, investasi, dan tips hemat yang cerdas.
+- Berbicara dengan gaya ramah, penuh semangat, bijak, namun santai menggunakan bahasa Indonesia.
+- Gunakan emoji burung hantu (🦉), koin (🪙), buku catatan (📝), grafik naik (📈), atau hati (💚) secara kreatif untuk menyemangati pengguna.
+- Panggil pengguna dengan sebutan hangat seperti "Teman Catat" atau "Sobat Hemat".
+- Berikan saran yang praktis, solutif, diletakkan sesingkat dan sepadat mungkin.
+
+Konteks Transaksi Pengguna Saat Ini:
+${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada transaksi catat terinput."}
+`;
+
+      const contents = [
+        { role: "system", parts: [{ text: systemInstruction }] },
+        ...history.map((h: any) => ({ 
+          role: h.role === "user" ? "user" : "model", 
+          parts: [{ text: h.parts[0].text }] 
+        })),
+        { role: "user", parts: [{ text: message }] }
+      ];
+
+      if (ai) {
+        try {
+          console.log(`[Owi AI] Attempting Gemini chat streaming`);
+          const stream = await ai.models.generateContentStream({
+            model: "gemini-3.1-flash-lite",
+            contents: contents as any,
+            config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
+          });
+
+          for await (const chunk of stream) {
+            if (chunk.text) {
+              sendChunk({ text: chunk.text });
+            }
+          }
+          sendChunk({ done: true });
+          return res.end();
+        } catch (e: any) {
+          console.warn(`[Owi AI Warning] Gemini Streaming failed: ${e.message || e}`);
+          // If Gemini fails, we'll try fallbacks (non-streaming for now to keep it simple, or I could implement streaming fallbacks too)
+        }
+      }
+
+      // Non-streaming fallback for now if Gemini fails
+      const fallbackText = await generateContentWithFallback({ 
+        messages: [
+          { role: "system", content: systemInstruction },
+          ...history.map((h: any) => ({ role: h.role === "user" ? "user" : "assistant", content: h.parts[0].text })),
+          { role: "user", content: message }
+        ] 
+      });
+      
+      if (fallbackText) {
+        sendChunk({ text: fallbackText, done: true });
+      } else {
+        sendChunk({ text: getLocalOwiChat(message, transactions), done: true });
+      }
+      res.end();
+
+    } catch (e: any) {
+      console.error("AI Streaming Fatal Error:", e);
+      sendChunk({ text: getLocalOwiChat(message, transactions), done: true });
+      res.end();
     }
   });
 

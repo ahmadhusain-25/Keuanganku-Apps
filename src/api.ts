@@ -241,6 +241,60 @@ export const sendAIChatMessage = async (
   return handleResponse(res, "Failed to get response from Owi Chat");
 };
 
+export const sendAIChatMessageStream = async (
+  message: string,
+  history: Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>,
+  transactions: Transaction[],
+  onChunk: (text: string) => void
+) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/ai/chat/stream"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ message, history, transactions })
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to connect to Owi Chat stream");
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("ReadableStream not supported");
+
+  const decoder = new TextDecoder();
+  let finished = false;
+
+  while (!finished) {
+    const { value, done } = await reader.read();
+    if (done) {
+      finished = true;
+      break;
+    }
+
+    const chunk = decoder.decode(value, { stream: true });
+    const lines = chunk.split("\n");
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.text) {
+            onChunk(data.text);
+          }
+          if (data.done) {
+            finished = true;
+          }
+        } catch (e) {
+          console.error("Error parsing stream chunk:", e);
+        }
+      }
+    }
+  }
+};
+
 export const fetchAISuggestions = async (category: string, type: string) => {
   const token = await getAccessToken();
   const res = await fetch(getApiUrl("/api/ai/suggestions"), {
