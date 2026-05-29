@@ -205,6 +205,20 @@ const handleLocalAuthFallback = async (email: string, pass: string, action: "sig
 };
 
 export const signInWithEmail = async (email: string, pass: string): Promise<any> => {
+  const normalizedEmail = email.toLowerCase().trim();
+  const usersKey = "owi_fallback_users";
+  try {
+    const saved = localStorage.getItem(usersKey);
+    if (saved) {
+      const users = JSON.parse(saved);
+      if (users[normalizedEmail]) {
+        return handleLocalAuthFallback(email, pass, "signin");
+      }
+    }
+  } catch (e) {
+    console.error("Local account pre-check error:", e);
+  }
+
   try {
     const result = await signInWithEmailAndPassword(auth, email, pass);
     return result.user;

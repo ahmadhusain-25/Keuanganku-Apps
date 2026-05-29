@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
-import { AlertCircle, ArrowRightLeft, UserCheck, Mail, Lock, UserPlus, LogIn, ChevronRight, ShieldAlert } from "lucide-react";
+import { AlertCircle, ArrowRightLeft, UserCheck, Mail, Lock, UserPlus, LogIn, ChevronRight, ShieldAlert, Eye, EyeOff } from "lucide-react";
 import { AppLogo } from "./AppLogo";
 
 export const Login = ({ 
@@ -27,6 +27,7 @@ export const Login = ({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -158,13 +159,21 @@ export const Login = ({
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 placeholder="Kata Sandi" 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-[#6a8d73] outline-none transition-all placeholder:text-slate-400"
+                className="w-full pl-11 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-[#6a8d73] outline-none transition-all placeholder:text-slate-400"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 outline-none p-1 transition-all"
+                title={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
+              >
+                {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+              </button>
             </div>
 
             <Button
