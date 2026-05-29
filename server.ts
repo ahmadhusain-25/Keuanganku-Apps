@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { google } from "googleapis";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import OpenAI from "openai";
+import { QdrantClient } from "@qdrant/js-client-rest";
 
 const PORT = 3000;
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ 
@@ -32,6 +33,190 @@ function getNvidiaClient() {
   }
   return nvidiaClient;
 }
+
+let cachedCloudflareAccountId: string | null = null;
+
+async function getCloudflareAccountId(apiKey: string): Promise<string | null> {
+  if (cachedCloudflareAccountId) return cachedCloudflareAccountId;
+  
+  if (process.env.CLOUDFLARE_ACCOUNT_ID) {
+    cachedCloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    return cachedCloudflareAccountId;
+  }
+
+  try {
+    console.log("[Cloudflare AI] Finding account ID from API token...");
+    const response = await fetch("https://api.cloudflare.com/client/v4/accounts", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (response.ok) {
+      const data: any = await response.json();
+      if (data.success && data.result && data.result.length > 0) {
+        cachedCloudflareAccountId = data.result[0].id;
+        console.log(`[Cloudflare AI] Detected account ID: ${cachedCloudflareAccountId}`);
+        return cachedCloudflareAccountId;
+      }
+    }
+  } catch (err: any) {
+    console.error("[Cloudflare AI] Error fetching account ID:", err.message || err);
+  }
+
+  // Fallback: If 32 hex chars, assume it may also be the account ID itself
+  if (apiKey && apiKey.length === 32) {
+    console.log("[Cloudflare AI] API key is 32 chars, using it as fallback Cloudflare Account ID.");
+    return apiKey;
+  }
+
+  return null;
+}
+
+async function generateCloudflareAIContent(
+  apiKey: string,
+  params: { messages?: Array<{role: string, content: string}>, prompt?: string }
+): Promise<string | null> {
+  const accountId = await getCloudflareAccountId(apiKey);
+  if (!accountId) {
+    console.warn("[Cloudflare AI] No account ID could be determined.");
+    return null;
+  }
+
+  // Use recommended text generation model: @cf/meta/llama-3.1-8b-instruct
+  const model = "@cf/meta/llama-3.1-8b-instruct";
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+
+  try {
+    let bodyMessages;
+    if (params.messages) {
+      bodyMessages = params.messages;
+    } else {
+      bodyMessages = [
+        { role: "user", content: params.prompt || "" }
+      ];
+    }
+
+    console.log(`[Cloudflare AI] Running model ${model} at ${url}...`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: bodyMessages
+      })
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      if (data.success && data.result) {
+        return data.result.response || "";
+      } else {
+        console.warn("[Cloudflare AI] Direct run response structure was unexpected:", data);
+        if (data.errors && data.errors.length > 0) {
+          throw new Error(data.errors[0].message || "Unknown Cloudflare AI error");
+        }
+      }
+    } else {
+      const errText = await res.text();
+      console.error(`[Cloudflare AI] HTTP failure: ${res.status}`, errText);
+    }
+  } catch (e: any) {
+    console.error("[Cloudflare AI] Execution failed:", e.message || e);
+  }
+  return null;
+}
+
+async function streamCloudflareAI(
+  apiKey: string,
+  params: { messages?: Array<{role: string, content: string}>, prompt?: string },
+  onChunk: (text: string) => void
+): Promise<boolean> {
+  const accountId = await getCloudflareAccountId(apiKey);
+  if (!accountId) return false;
+
+  const model = "@cf/meta/llama-3.1-8b-instruct";
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
+
+  try {
+    let bodyMessages;
+    if (params.messages) {
+      bodyMessages = params.messages;
+    } else {
+      bodyMessages = [
+        { role: "user", content: params.prompt || "" }
+      ];
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: bodyMessages,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      console.error(`[Cloudflare AI Stream] HTTP Error: ${response.status}`);
+      return false;
+    }
+
+    const readerStream = response.body;
+    if (!readerStream) {
+      console.warn("[Cloudflare AI Stream] No response body found.");
+      return false;
+    }
+
+    // Use standard getReader for type compatibility
+    const reader = readerStream.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    let done = false;
+
+    while (!done) {
+      const { value, done: isDone } = await reader.read();
+      done = isDone;
+      if (value) {
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (trimmed === "data: [DONE]") continue;
+
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const jsonText = trimmed.slice(6);
+              if (jsonText.startsWith("{")) {
+                const parsed = JSON.parse(jsonText);
+                if (parsed.response) {
+                  onChunk(parsed.response);
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+      }
+    }
+    return true;
+  } catch (err: any) {
+    console.error("[Cloudflare AI Stream] Fatal Error:", err.message || err);
+    return false;
+  }
+}
+
 
 // Set up Google Drive, Sheets, Calendar wrappers
 function getAuthClient(authHeader: string | undefined) {
@@ -788,7 +973,22 @@ async function startServer() {
       }
     }
 
-    // 2. Fallback to NVIDIA
+    // 2. Try Cloudflare Workers AI if configured
+    const cloudflareApiKey = process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd";
+    if (cloudflareApiKey) {
+      try {
+        console.log(`[Owi AI] Attempting Cloudflare Workers AI chat completion`);
+        const cfText = await generateCloudflareAIContent(cloudflareApiKey, params);
+        if (cfText) {
+          console.log(`[Owi AI] Successfully generated content using Cloudflare AI`);
+          return cfText;
+        }
+      } catch (err: any) {
+        console.warn(`[Owi AI Warning] Cloudflare Workers AI failed: ${err.message || err}. Falling back...`);
+      }
+    }
+
+    // 3. Fallback to NVIDIA
     console.log(`[Owi AI] Attempting NVIDIA chat completion`);
     const nvidiaClient = getNvidiaClient();
     if (nvidiaClient) {
@@ -805,7 +1005,7 @@ async function startServer() {
       }
     }
 
-    // 3. Fallback to OpenRouter
+    // 4. Fallback to OpenRouter
     console.log(`[Owi AI] Attempting OpenRouter chat completion`);
     const openAIClient = getOpenAIClient();
     if (openAIClient) {
@@ -830,7 +1030,7 @@ async function startServer() {
   app.post("/api/ai/summary", async (req, res) => {
     const { transactions = [] } = req.body;
     try {
-      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd" || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
       if (!hasAI) {
         return res.json({ text: getLocalOwiSummary(transactions) });
       }
@@ -852,7 +1052,7 @@ async function startServer() {
   app.post("/api/ai/chat", async (req, res) => {
     const { message, history = [], transactions = [] } = req.body;
     try {
-      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd" || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
       if (!hasAI) {
         return res.json({ text: getLocalOwiChat(message, transactions) });
       }
@@ -900,7 +1100,7 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
     };
 
     try {
-      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd" || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
       if (!hasAI) {
         sendChunk({ text: getLocalOwiChat(message, transactions), done: true });
         return res.end();
@@ -945,11 +1145,39 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
           return res.end();
         } catch (e: any) {
           console.warn(`[Owi AI Warning] Gemini Streaming failed: ${e.message || e}`);
-          // If Gemini fails, we'll try fallbacks (non-streaming for now to keep it simple, or I could implement streaming fallbacks too)
+          // If Gemini fails, we'll try fallbacks (first Cloudflare streaming, then others)
         }
       }
 
-      // Non-streaming fallback for now if Gemini fails
+      // Try Cloudflare Workers AI streaming
+      const cloudflareApiKey = process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd";
+      if (cloudflareApiKey) {
+        try {
+          console.log(`[Owi AI] Attempting Cloudflare Workers AI streaming`);
+          const streamResult = await streamCloudflareAI(
+            cloudflareApiKey,
+            {
+              messages: [
+                { role: "system", content: systemInstruction },
+                ...history.map((h: any) => ({ role: h.role === "user" ? "user" : "assistant", content: h.parts[0].text })),
+                { role: "user", content: message }
+              ]
+            },
+            (text) => {
+              sendChunk({ text });
+            }
+          );
+          if (streamResult) {
+            sendChunk({ done: true });
+            return res.end();
+          }
+        } catch (cfErr: any) {
+          console.warn(`[Owi AI Warning] Cloudflare Workers AI streaming failed: ${cfErr.message || cfErr}`);
+        }
+      }
+
+      // Non-streaming fallback for now if Gemini & Cloudflare Stream fails
+
       const fallbackText = await generateContentWithFallback({ 
         messages: [
           { role: "system", content: systemInstruction },
@@ -994,7 +1222,7 @@ ${transactions.length > 0 ? JSON.stringify(transactions, null, 2) : "Belum ada t
     }
 
     try {
-      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
+      const hasAI = !!(process.env.GEMINI_API_KEY || process.env.CLOUDFLARE_API_KEY || "38fec09996ed8c9f586eb43dca86e2fd" || process.env.OPENROUTER_API_KEY || process.env.NVIDIA_API_KEY);
       if (!hasAI) {
         return res.json({ suggestions: fallbacks });
       }
@@ -1026,6 +1254,220 @@ Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Be
     } catch (e: any) {
       console.warn("AI suggestions failed: ", e.message || e);
       return res.json({ suggestions: fallbacks });
+    }
+  });
+
+  // --- QDRANT INTEGRATION & VECTOR STORAGE ---
+  let qdrantClient: QdrantClient | null = null;
+  const defaultQdrantKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6NmM0Nzk0YTEtYWQ0MC00NDVmLWJiNjgtYjNkZjVmYTljODdhIn0.WpxbQ4GrKYNLUCul7I_xeF5UZPkwoBReOqa_dZ1-42M";
+
+  function getQdrant(): QdrantClient | null {
+    if (!qdrantClient) {
+      const apiKey = process.env.QDRANT_API_KEY || defaultQdrantKey;
+      const url = process.env.QDRANT_URL;
+
+      if (!url) {
+        console.warn("[Qdrant] QDRANT_URL environment variable is occupied or not set.");
+        return null;
+      }
+
+      qdrantClient = new QdrantClient({
+        url,
+        apiKey
+      });
+    }
+    return qdrantClient;
+  }
+
+  function stringToUUID(str: string): string {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(str)) {
+      return str;
+    }
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).padStart(8, '0');
+    return `${hex}-4000-8000-0000-000000000000`;
+  }
+
+  async function ensureQdrantCollectionWithVectorSize(vectorSize: number) {
+    const client = getQdrant();
+    if (!client) return false;
+
+    try {
+      const collections = await client.getCollections();
+      const exists = collections.collections.some(c => c.name === "transactions");
+      if (!exists) {
+        console.log(`[Qdrant] Creating collection "transactions" with size ${vectorSize}...`);
+        await client.createCollection("transactions", {
+          vectors: {
+            size: vectorSize,
+            distance: "Cosine"
+          }
+        });
+      }
+      return true;
+    } catch (err: any) {
+      console.error("[Qdrant] Error checking/creating collection:", err.message || err);
+      return false;
+    }
+  }
+
+  async function generateEmbedding(text: string): Promise<number[] | null> {
+    if (!ai) {
+      console.warn("[Qdrant] Gemini AI is not initialized.");
+      return null;
+    }
+    try {
+      // Use text-embedding-004
+      const response = await ai.models.embedContent({
+        model: "text-embedding-004",
+        contents: text,
+      });
+      const values = response.embeddings?.[0]?.values;
+      if (values && values.length > 0) {
+        return values;
+      }
+      // Fallback
+      const responseFallback = await ai.models.embedContent({
+        model: "gemini-embedding-2-preview",
+        contents: text,
+      });
+      return responseFallback.embeddings?.[0]?.values || null;
+    } catch (e: any) {
+      console.error("[Qdrant] Failed to generate embedding:", e.message || e);
+      return null;
+    }
+  }
+
+  // Check if Qdrant is configured
+  app.get("/api/qdrant/config", (req, res) => {
+    const hasUrl = !!process.env.QDRANT_URL;
+    res.json({
+      configured: hasUrl,
+      url: process.env.QDRANT_URL || "",
+      defaultApiKeyUsed: !process.env.QDRANT_API_KEY
+    });
+  });
+
+  // Sync entire transaction list to Qdrant
+  app.post("/api/qdrant/sync", async (req, res) => {
+    try {
+      const { transactions = [] } = req.body;
+      const client = getQdrant();
+      if (!client) {
+        return res.status(400).json({
+          error: "Qdrant URL is not configured. Go to Settings > Secrets in AI Studio to set QDRANT_URL."
+        });
+      }
+
+      if (transactions.length === 0) {
+        return res.json({ success: true, count: 0, message: "No transactions to sync." });
+      }
+
+      console.log(`[Qdrant] Syncing ${transactions.length} transactions...`);
+      const points = [];
+
+      for (const t of transactions) {
+        const dateStr = t.date ? `Tanggal: ${t.date}. ` : "";
+        const typeStr = `Jenis: ${t.type === "Income" ? "Pemasukan" : "Pengeluaran"}. `;
+        const catStr = t.category ? `Kategori: ${t.category}. ` : "";
+        const amtStr = `Nominal: Rp ${Number(t.amount || 0).toLocaleString("id-ID")}. `;
+        const descStr = t.description ? `Deskripsi: ${t.description}.` : "";
+        const text = `${dateStr}${typeStr}${catStr}${amtStr}${descStr}`.trim();
+
+        const vector = await generateEmbedding(text);
+        if (vector) {
+          points.push({
+            id: stringToUUID(t.id || String(Date.now())),
+            vector,
+            payload: {
+              id: t.id,
+              date: t.date || "",
+              type: t.type || "",
+              category: t.category || "",
+              amount: Number(t.amount || 0),
+              description: t.description || "",
+              text
+            }
+          });
+        }
+      }
+
+      if (points.length === 0) {
+        return res.status(400).json({ error: "Failed to create embeddings for any transaction." });
+      }
+
+      const vectorSize = points[0].vector.length;
+      const colCreated = await ensureQdrantCollectionWithVectorSize(vectorSize);
+      if (!colCreated) {
+        return res.status(500).json({ error: "Failed to initialize or find Qdrant collection." });
+      }
+
+      // Upsert to Qdrant inside a try block
+      await client.upsert("transactions", {
+        wait: true,
+        points: points
+      });
+
+      res.json({ success: true, count: points.length });
+    } catch (e: any) {
+      console.error("[Qdrant Exception] Sync error: ", e);
+      res.status(500).json({ error: e.message || "Failed syncing to Qdrant" });
+    }
+  });
+
+  // Search transactions semantically
+  app.post("/api/qdrant/search", async (req, res) => {
+    try {
+      const { query, limit = 5 } = req.body;
+      const client = getQdrant();
+      if (!client) {
+        return res.status(400).json({
+          error: "Qdrant URL is not configured. Go to Settings > Secrets in AI Studio to set QDRANT_URL."
+        });
+      }
+
+      if (!query || query.trim() === "") {
+        return res.json({ results: [] });
+      }
+
+      console.log(`[Qdrant] Searching semantically: "${query}"`);
+      const vector = await generateEmbedding(query);
+      if (!vector) {
+        return res.status(500).json({ error: "Failed to generate embedding for search query." });
+      }
+
+      // Ensure the collection is ready (just in case they search before sync, search should handle it)
+      try {
+        const collections = await client.getCollections();
+        const exists = collections.collections.some(c => c.name === "transactions");
+        if (!exists) {
+          return res.json({ results: [], message: "Collection not initialized. Please sync first." });
+        }
+
+        const hits = await client.search("transactions", {
+          vector,
+          limit,
+          with_payload: true
+        });
+
+        const results = hits.map(hit => ({
+          transaction: hit.payload,
+          score: hit.score
+        }));
+
+        res.json({ results });
+      } catch (err: any) {
+        console.error("[Qdrant Search inner error]", err);
+        return res.status(500).json({ error: err.message || "Qdrant query execution failed." });
+      }
+    } catch (e: any) {
+      console.error("[Qdrant Exception] Search error: ", e);
+      res.status(500).json({ error: e.message || "Failed querying Qdrant" });
     }
   });
 

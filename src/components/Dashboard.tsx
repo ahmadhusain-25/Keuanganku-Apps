@@ -50,15 +50,18 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
-  Pencil
+  Pencil,
+  FileText
 } from "lucide-react";
 import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
+import { generateFinancialReport } from "../utils/pdfGenerator";
 import { SettingsPanel } from "./SettingsPanel";
 import { FloatingAssistant } from "./FloatingAssistant";
 import { googleSignIn } from "../auth";
 import { BudgetDetails } from "./BudgetDetails";
 
 export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void }) => {
+  const isGuest = !!(user?.isGuest || user?.isLocalFallback || !localStorage.getItem("google_access_token"));
   const adderFormRef = useRef<HTMLDivElement>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
@@ -70,6 +73,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [spreadsheetsList, setSpreadsheetsList] = useState<any[]>([]);
   const [loadingSpreadsheets, setLoadingSpreadsheets] = useState(false);
   const [customSpreadsheetId, setCustomSpreadsheetId] = useState<string | null>("monthly");
+
+  const guestTransactionsKey = `guest_transactions_${user?.uid || "guest"}`;
+  const guestRemindersKey = `guest_reminders_${user?.uid || "guest"}`;
+
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
+  const isPrefsLoadingRef = useRef(false);
+  const stateUserRef = useRef<string | null>(null);
   
   // Create / Record Transactions Form States
   const [isAdding, setIsAdding] = useState(false);
@@ -146,26 +156,15 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   // Notifications, WhatsApp destination, DoB
   const [reminderSummary, setReminderSummary] = useState("");
   const [reminderDate, setReminderDate] = useState("");
-  const [phone, setPhone] = useState("1269409217");
-  const [savedPhones, setSavedPhones] = useState<string[]>(() => {
-    const saved = localStorage.getItem("owi_saved_phones");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          if (!parsed.includes("")) {
-            return ["", ...parsed];
-          }
-          return parsed;
-        }
-      } catch (e) {}
-    }
-    return [""];
-  });
+  const [phone, setPhone] = useState("");
+  const [savedPhones, setSavedPhones] = useState<string[]>([""]);
 
   useEffect(() => {
-    localStorage.setItem("owi_saved_phones", JSON.stringify(savedPhones));
-  }, [savedPhones]);
+    const currentUid = user?.uid || "guest";
+    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
+    const key = `owi_saved_phones_${currentUid}`;
+    localStorage.setItem(key, JSON.stringify(savedPhones));
+  }, [savedPhones, user?.uid, loadedUid]);
 
   const handleSavePhone = (numToSave: string) => {
     const trimmed = numToSave.trim();
@@ -221,22 +220,22 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [copiedScript, setCopiedScript] = useState(false);
 
   // AI Assistant configuration
-  const [isAssistantEnabled, setIsAssistantEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem("owi_assistant_enabled");
-    return saved !== "false";
-  });
-  const [assistantSize, setAssistantSize] = useState<number>(() => {
-    const saved = localStorage.getItem("owi_assistant_size");
-    return saved ? Number(saved) : 1;
-  });
+  const [isAssistantEnabled, setIsAssistantEnabled] = useState<boolean>(true);
+  const [assistantSize, setAssistantSize] = useState<number>(1);
 
   useEffect(() => {
-    localStorage.setItem("owi_assistant_enabled", String(isAssistantEnabled));
-  }, [isAssistantEnabled]);
+    const currentUid = user?.uid || "guest";
+    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
+    const key = `owi_assistant_enabled_${currentUid}`;
+    localStorage.setItem(key, String(isAssistantEnabled));
+  }, [isAssistantEnabled, user?.uid, loadedUid]);
 
   useEffect(() => {
-    localStorage.setItem("owi_assistant_size", String(assistantSize));
-  }, [assistantSize]);
+    const currentUid = user?.uid || "guest";
+    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
+    const key = `owi_assistant_size_${currentUid}`;
+    localStorage.setItem(key, String(assistantSize));
+  }, [assistantSize, user?.uid, loadedUid]);
 
   // Profile preferences (Default to emerald (Sage Green) & light mode)
   const [themeMode, setThemeMode] = useState<"blue" | "purple" | "emerald" | "rose" | "pink">("emerald");
@@ -252,14 +251,14 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   useEffect(() => {
     setTempBudget(String(monthlyBudget));
   }, [monthlyBudget]);
-  const [showBalance, setShowBalance] = useState<boolean>(() => {
-    const saved = localStorage.getItem("owi_show_balance");
-    return saved !== "false";
-  });
+  const [showBalance, setShowBalance] = useState<boolean>(true);
 
   useEffect(() => {
-    localStorage.setItem("owi_show_balance", String(showBalance));
-  }, [showBalance]);
+    const currentUid = user?.uid || "guest";
+    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
+    const key = `owi_show_balance_${currentUid}`;
+    localStorage.setItem(key, String(showBalance));
+  }, [showBalance, user?.uid, loadedUid]);
 
   // Router pagination state
   const [activePage, setActivePage] = useState<"dashboard" | "profile" | "budget_detail">("dashboard");
@@ -300,39 +299,107 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   }, [toast]);
 
   useEffect(() => {
-    const profileKey = user?.isGuest ? "guestProfile" : "userProfile";
-    const saved = localStorage.getItem(profileKey);
-    if (saved) {
+    const currentUid = user?.uid || "guest";
+    isPrefsLoadingRef.current = true;
+    
+    // 1. Load saved phones
+    const phonesKey = `owi_saved_phones_${currentUid}`;
+    const savedPhonesVal = localStorage.getItem(phonesKey);
+    let loadedPhones: string[] = [""];
+    if (savedPhonesVal) {
       try {
-        const p = JSON.parse(saved);
+        const parsed = JSON.parse(savedPhonesVal);
+        if (Array.isArray(parsed)) {
+          loadedPhones = parsed.includes("") ? parsed : ["", ...parsed];
+        }
+      } catch (e) {}
+    }
+    setSavedPhones(loadedPhones);
+
+    // 2. Load Assistant configurations
+    const assistantEnabledKey = `owi_assistant_enabled_${currentUid}`;
+    const assistantEnabledSaved = localStorage.getItem(assistantEnabledKey);
+    setIsAssistantEnabled(assistantEnabledSaved !== "false");
+
+    const assistantSizeKey = `owi_assistant_size_${currentUid}`;
+    const assistantSizeSaved = localStorage.getItem(assistantSizeKey);
+    setAssistantSize(assistantSizeSaved ? Number(assistantSizeSaved) : 1);
+
+    // 3. Load Show Balance
+    const showBalanceKey = `owi_show_balance_${currentUid}`;
+    const showBalanceSaved = localStorage.getItem(showBalanceKey);
+    setShowBalance(showBalanceSaved !== "false");
+
+    // 4. Load Profile preferences
+    const profileKey = isGuest ? `guestProfile_${currentUid}` : `userProfile_${currentUid}`;
+    const profileSaved = localStorage.getItem(profileKey);
+    if (profileSaved) {
+      try {
+        const p = JSON.parse(profileSaved);
         if (p.phone) {
           setPhone(p.phone);
         } else {
           setPhone("");
         }
-        if (p.dob) setDob(p.dob);
-        if (p.themeMode) setThemeMode(p.themeMode);
-        if (p.colorMode) setColorMode(p.colorMode);
-        if (p.designStyle) setDesignStyle(p.designStyle);
-        if (p.customName) setCustomName(p.customName);
-        if (p.customPhoto) setCustomPhoto(p.customPhoto);
+        if (p.dob) {
+          setDob(p.dob);
+        } else {
+          setDob("");
+        }
+        if (p.themeMode) {
+          setThemeMode(p.themeMode);
+        } else {
+          setThemeMode("emerald");
+        }
+        if (p.colorMode) {
+          setColorMode(p.colorMode);
+        } else {
+          setColorMode("light");
+        }
+        if (p.designStyle) {
+          setDesignStyle(p.designStyle);
+        } else {
+          setDesignStyle("modern");
+        }
+        if (p.customName) {
+          setCustomName(p.customName);
+        } else {
+          setCustomName(user?.displayName || "");
+        }
+        if (p.customPhoto) {
+          setCustomPhoto(p.customPhoto);
+        } else {
+          setCustomPhoto(user?.photoURL || "");
+        }
         if (p.monthlyBudget !== undefined && p.monthlyBudget !== null) {
           setMonthlyBudget(Number(p.monthlyBudget));
-        } else if (user?.isGuest) {
+        } else {
           setMonthlyBudget(0);
         }
       } catch (e) {}
     } else {
-      if (user?.isGuest) {
-        setMonthlyBudget(0);
-      }
+      // Clear profile inputs back to initial values for this user
+      setPhone("");
+      setDob("");
+      setThemeMode("emerald");
+      setColorMode("light");
+      setDesignStyle("modern");
+      setCustomName(user?.displayName || "");
+      setCustomPhoto(user?.photoURL || "");
+      setMonthlyBudget(0);
     }
-  }, [user?.isGuest]);
+
+    stateUserRef.current = currentUid;
+    setLoadedUid(currentUid);
+    isPrefsLoadingRef.current = false;
+  }, [user?.uid, isGuest]);
 
   useEffect(() => {
-    const profileKey = user?.isGuest ? "guestProfile" : "userProfile";
+    const currentUid = user?.uid || "guest";
+    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
+    const profileKey = isGuest ? `guestProfile_${currentUid}` : `userProfile_${currentUid}`;
     localStorage.setItem(profileKey, JSON.stringify({ phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget }));
-  }, [phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget, user?.isGuest]);
+  }, [phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget, isGuest, user?.uid, loadedUid]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -479,6 +546,32 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
   const filteredTransactions = getFilteredTransactions();
 
+  const handleThemeHex = () => {
+    switch(themeMode) {
+      case "emerald": return "#6a8d73";
+      case "blue": return "#3b82f6";
+      case "purple": return "#8b5cf6";
+      case "rose": return "#f43f5e";
+      case "pink": return "#ec4899";
+      default: return "#6a8d73";
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (filteredTransactions.length === 0) return showToast("Belum ada data transaksi untuk diexport PDF.", "info");
+    
+    generateFinancialReport({
+      transactions: filteredTransactions,
+      startDate: filterStartDate,
+      endDate: filterEndDate,
+      preset: filterPreset,
+      userName: customName || user?.displayName || "",
+      themeColor: handleThemeHex()
+    });
+    
+    showToast("Laporan PDF berhasil digenerate!", "success");
+  };
+
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) return showToast("Belum ada data transaksi untuk diexport.", "info");
     const csvRows = [];
@@ -511,15 +604,17 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   };
 
   const loadSpreadsheetsList = async () => {
-    if (user?.isGuest) return;
+    if (isGuest) return;
     try {
       setLoadingSpreadsheets(true);
       const res = await fetchUserSpreadsheets();
       setSpreadsheetsList(res.files || []);
     } catch (e: any) {
-      console.error("Gagal mengambil daftar spreadsheet:", e);
       if (e.message === "UNAUTHORIZED_SESSION_EXPIRED") {
         setError("UNAUTHORIZED_SESSION_EXPIRED");
+        console.warn("Gagal mengambil daftar spreadsheet: Sesi Google Workspace Terputus (UNAUTHORIZED_SESSION_EXPIRED)");
+      } else {
+        console.error("Gagal mengambil daftar spreadsheet:", e);
       }
     } finally {
       setLoadingSpreadsheets(false);
@@ -553,8 +648,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     try {
       setLoading(true);
       setError("");
-      if (user?.isGuest) {
-        const stored = localStorage.getItem("guest_transactions");
+      if (isGuest) {
+        const stored = localStorage.getItem(guestTransactionsKey);
         const txs = stored ? JSON.parse(stored) : [];
         setTransactions(txs);
         setSpreadsheetId("guest-spreadsheet");
@@ -590,7 +685,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
   useEffect(() => {
     loadData();
-    if (!user?.isGuest) {
+    if (!isGuest) {
       loadSpreadsheetsList();
     }
   }, []);
@@ -658,7 +753,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             responseText = `❌ *Gagal mencatat*: Jumlah transaksi harus berupa angka positif yang valid!`;
           } else {
             try {
-              if (user?.isGuest) {
+              if (isGuest) {
                 const newTx = {
                   id: Date.now().toString(),
                   amount: txAmount,
@@ -667,10 +762,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                   description: txDesc,
                   date: new Date().toISOString().split('T')[0]
                 };
-                const stored = localStorage.getItem("guest_transactions");
+                const stored = localStorage.getItem(guestTransactionsKey);
                 const txs = stored ? JSON.parse(stored) : [];
                 const updated = [newTx, ...txs];
-                localStorage.setItem("guest_transactions", JSON.stringify(updated));
+                localStorage.setItem(guestTransactionsKey, JSON.stringify(updated));
                 setTransactions(updated);
               } else {
                 await addTransaction({
@@ -696,8 +791,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         }
       } else if (lowerInput === "!reset" || lowerInput === "reset") {
         try {
-          if (user?.isGuest) {
-            localStorage.removeItem("guest_transactions");
+          if (isGuest) {
+            localStorage.removeItem(guestTransactionsKey);
             setTransactions([]);
           } else {
             await resetTransactions(spreadsheetId || "");
@@ -739,7 +834,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       
       let updatedList: Transaction[] = [];
 
-      if (user?.isGuest) {
+      if (isGuest) {
         const newTx: Transaction = {
           id: Date.now().toString(),
           amount: inputAmount,
@@ -748,10 +843,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           description: desc,
           date
         };
-        const stored = localStorage.getItem("guest_transactions");
+        const stored = localStorage.getItem(guestTransactionsKey);
         const txs = stored ? JSON.parse(stored) : [];
         updatedList = [newTx, ...txs];
-        localStorage.setItem("guest_transactions", JSON.stringify(updatedList));
+        localStorage.setItem(guestTransactionsKey, JSON.stringify(updatedList));
         setTransactions(updatedList);
       } else {
         await addTransaction({
@@ -843,10 +938,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       return;
     }
     try {
-      if (user?.isGuest) {
-        const localReminders = JSON.parse(localStorage.getItem("guest_reminders") || "[]");
+      if (isGuest) {
+        const localReminders = JSON.parse(localStorage.getItem(guestRemindersKey) || "[]");
         const newReminder = { id: Date.now().toString(), summary: reminderSummary, date: reminderDate };
-        localStorage.setItem("guest_reminders", JSON.stringify([...localReminders, newReminder]));
+        localStorage.setItem(guestRemindersKey, JSON.stringify([...localReminders, newReminder]));
         showToast("Pengingat berhasil disimpan lokal (Mode Tamu)!", "success");
         setReminderSummary("");
         setReminderDate("");
@@ -872,11 +967,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       async () => {
         try {
           setDeletingId(id);
-          if (user?.isGuest) {
-            const stored = localStorage.getItem("guest_transactions");
+          if (isGuest) {
+            const stored = localStorage.getItem(guestTransactionsKey);
             const txs: Transaction[] = stored ? JSON.parse(stored) : [];
             const updated = txs.filter(t => t.id !== id);
-            localStorage.setItem("guest_transactions", JSON.stringify(updated));
+            localStorage.setItem(guestTransactionsKey, JSON.stringify(updated));
             setTransactions(updated);
             showToast("Transaksi berhasil dihapus", "success");
           } else {
@@ -901,8 +996,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       async () => {
         try {
           setIsResetting(true);
-          if (user?.isGuest) {
-            localStorage.removeItem("guest_transactions");
+          if (isGuest) {
+            localStorage.removeItem(guestTransactionsKey);
             setTransactions([]);
             showToast("Seluruh transaksi berhasil direset", "success");
           } else {
@@ -1014,7 +1109,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] h-4 mt-0.5 border-l pl-3 border-slate-200 dark:border-slate-800">
               <span className="text-[10px] bg-[#6a8d73]/15 text-[#6a8d73] px-2 py-0.5 rounded-full font-bold">v2.1</span>
               <span className={`${ui.textMuted} font-bold ml-1`}>
-                {customName || user?.displayName || "Tamu Keuanganku"}
+                {customName || user?.displayName || "Pengguna"}
               </span>
             </div>
           </div>
@@ -1179,7 +1274,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           <>
             {/* Primary Dashboard layout */}
             {/* Database Sheets Indicator (Not guest user) */}
-            {!user?.isGuest && (
+            {!isGuest && (
               <div className={`${ui.panelBg} border p-4 ${ui.panelRadius} flex flex-col sm:flex-row items-center justify-between gap-4 transition-all duration-500`}>
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 rounded-2xl bg-green-500/10 text-green-500">
@@ -1786,6 +1881,12 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         </button>
                       )}
                       <button 
+                        onClick={handleExportPDF}
+                        className={`text-[10px] font-bold px-2.5 py-1 flex items-center gap-1.5 ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-705' : 'bg-white/5 hover:bg-white/10 text-slate-200'} border border-slate-500/5 rounded-full transition-colors`}
+                      >
+                        <FileText className="w-3 h-3" /> Export PDF
+                      </button>
+                      <button 
                         onClick={handleExportCSV}
                         className={`text-[10px] font-bold px-2.5 py-1 flex items-center gap-1.5 ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-705' : 'bg-white/5 hover:bg-white/10 text-slate-200'} border border-slate-500/5 rounded-full transition-colors`}
                       >
@@ -2197,9 +2298,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       <FloatingAssistant 
         transactions={transactions} 
         themeMode={colorMode} 
-        isGuest={!!user?.isGuest}
+        isGuest={isGuest}
         isEnabled={isAssistantEnabled}
         size={assistantSize}
+        userUid={user?.uid}
       />
     </div>
   );

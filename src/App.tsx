@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { initAuth, googleSignIn, googleSignInRedirect, logout, handleRedirectResult } from "./auth";
+import { initAuth, googleSignIn, googleSignInRedirect, logout, handleRedirectResult, signInWithEmail, signUpWithEmail } from "./auth";
 import { Login } from "./components/Login";
 import { Dashboard } from "./components/Dashboard";
 
@@ -14,7 +14,7 @@ export default function App() {
     if (isGuest) {
       setUser({
         uid: "guest-user",
-        displayName: "Tamu Keuanganku",
+        displayName: "",
         email: "tamu@keuanganku.local",
         photoURL: "",
         isGuest: true
@@ -22,6 +22,25 @@ export default function App() {
       setNeedsAuth(false);
       setLoading(false);
       return;
+    }
+
+    const localFallbackUser = localStorage.getItem("localFallbackUser");
+    if (localFallbackUser) {
+      try {
+        const parsed = JSON.parse(localFallbackUser);
+        setUser({
+          uid: parsed.uid,
+          displayName: parsed.displayName,
+          email: parsed.email,
+          photoURL: "",
+          isLocalFallback: true
+        });
+        setNeedsAuth(false);
+        setLoading(false);
+        return;
+      } catch (e) {
+        console.error("Local fallback restoration error:", e);
+      }
     }
 
     let isSubscribed = true;
@@ -70,6 +89,7 @@ export default function App() {
     setLoginError(null);
     try {
       localStorage.removeItem("isGuestSession");
+      localStorage.removeItem("localFallbackUser");
       const res = await googleSignIn();
       if (res) {
         setUser(res.user);
@@ -77,7 +97,6 @@ export default function App() {
       }
     } catch (e: any) {
       console.error("Sign in error:", e);
-      const isIframe = window.self !== window.top;
       const errorCode = e?.code || "";
       const errorMessage = e?.message || "";
       
@@ -85,10 +104,39 @@ export default function App() {
     }
   };
 
+  const handleEmailLogin = async (email: string, pass: string) => {
+    setLoginError(null);
+    try {
+      localStorage.removeItem("isGuestSession");
+      localStorage.removeItem("localFallbackUser");
+      const user = await signInWithEmail(email, pass);
+      setUser(user);
+      setNeedsAuth(false);
+    } catch (e: any) {
+      console.error("Email sign in error:", e);
+      setLoginError({ code: e?.code || "auth/error", message: e?.message || String(e) });
+    }
+  };
+
+  const handleEmailSignUp = async (email: string, pass: string, name: string) => {
+    setLoginError(null);
+    try {
+      localStorage.removeItem("isGuestSession");
+      localStorage.removeItem("localFallbackUser");
+      const user = await signUpWithEmail(email, pass, name);
+      setUser(user);
+      setNeedsAuth(false);
+    } catch (e: any) {
+      console.error("Email sign up error:", e);
+      setLoginError({ code: e?.code || "auth/error", message: e?.message || String(e) });
+    }
+  };
+
   const handleRedirectLogin = async () => {
     setLoginError(null);
     try {
       localStorage.removeItem("isGuestSession");
+      localStorage.removeItem("localFallbackUser");
       await googleSignInRedirect();
     } catch (e: any) {
       console.error("Redirect sign in error:", e);
@@ -98,9 +146,10 @@ export default function App() {
 
   const handleGuestLogin = () => {
     localStorage.setItem("isGuestSession", "true");
+    localStorage.removeItem("localFallbackUser");
     setUser({
       uid: "guest-user",
-      displayName: "Tamu Keuanganku",
+      displayName: "",
       email: "tamu@keuanganku.local",
       photoURL: "",
       isGuest: true
@@ -110,6 +159,7 @@ export default function App() {
 
   const handleLogout = async () => {
     localStorage.removeItem("isGuestSession");
+    localStorage.removeItem("localFallbackUser");
     try {
       await logout();
     } catch (err) {
@@ -134,6 +184,8 @@ export default function App() {
     return (
       <Login 
         onLogin={handleLogin} 
+        onEmailLogin={handleEmailLogin}
+        onEmailSignUp={handleEmailSignUp}
         onRedirectLogin={handleRedirectLogin} 
         onGuestLogin={handleGuestLogin} 
         loginError={loginError}

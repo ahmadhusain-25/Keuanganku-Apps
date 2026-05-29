@@ -17,11 +17,14 @@ import {
   Info,
   Sliders,
   DollarSign,
-  Briefcase
+  Briefcase,
+  Sparkles,
+  RefreshCw,
+  Database
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { id } from "date-fns/locale";
-import { Transaction } from "../api";
+import { Transaction, fetchQdrantConfig, syncTransactionsToQdrant, searchSemanticTransactions } from "../api";
 
 interface BudgetDetailsProps {
   transactions: Transaction[];
@@ -55,6 +58,74 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<"all" | "Income" | "Expense">("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+  const [isAiSearch, setIsAiSearch] = useState(false);
+  const defaultQdrantKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIiwic3ViamVjdCI6ImFwaS1rZXk6NmM0Nzk0YTEtYWQ0MC00NDVmLWJiNjgtYjNkZjVmYTljODdhIn0.WpxbQ4GrKYNLUCul7I_xeF5UZPkwoBReOqa_dZ1-42M";
+  const [qdrantConfig, setQdrantConfig] = useState<{ configured: boolean; url?: string; defaultApiKeyUsed: boolean } | null>(null);
+  const [isSyncingQdrant, setIsSyncingQdrant] = useState(false);
+  const [isSearchingAi, setIsSearchingAi] = useState(false);
+  const [aiSearchResults, setAiSearchResults] = useState<Array<{ transaction: Transaction; score: number }> | null>(null);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await fetchQdrantConfig();
+        setQdrantConfig(config);
+      } catch (err) {
+        console.error("Failed loading Qdrant config:", err);
+      }
+    };
+    loadConfig();
+  }, [isAiSearch]);
+
+  const handleSyncQdrant = async () => {
+    setIsSyncingQdrant(true);
+    if (showToast) showToast("Sinkronisasi data transaksi dengan Qdrant...", "info");
+    try {
+      const res = await syncTransactionsToQdrant(transactions);
+      if (res.success) {
+        if (showToast) showToast(`Berhasil menyinkronkan ${res.count} transaksi ke Qdrant!`, "success");
+      } else {
+        if (showToast) showToast("Sinkronisasi gagal.", "error");
+      }
+    } catch (err: any) {
+      console.error("Failed syncing Qdrant:", err);
+      if (showToast) showToast(err.message || "Gagal menyisipkan vektor ke Qdrant.", "error");
+    } finally {
+      setIsSyncingQdrant(false);
+    }
+  };
+
+  const handleSemanticSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) {
+      setAiSearchResults(null);
+      return;
+    }
+    
+    setIsSearchingAi(true);
+    try {
+      const res = await searchSemanticTransactions(searchQuery);
+      setAiSearchResults(res.results || []);
+      if (showToast) {
+        if ((res.results || []).length > 0) {
+          showToast(`Ditemukan ${res.results.length} hasil pencarian semantik!`, "success");
+        } else {
+          showToast("Tidak ada transaksi yang cocok secara semantik.", "info");
+        }
+      }
+    } catch (err: any) {
+      console.error("Semantic search failed:", err);
+      if (showToast) showToast(err.message || "Pencarian semantik gagal.", "error");
+    } finally {
+      setIsSearchingAi(false);
+    }
+  };
+
+  const clearAiSearch = () => {
+    setAiSearchResults(null);
+    setSearchQuery("");
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [tempBudget, setTempBudget] = useState(String(monthlyBudget));
@@ -104,6 +175,23 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
       return matchesSearch && matchesType && matchesCategory;
     });
   }, [transactions, searchQuery, transactionTypeFilter, selectedCategory]);
+
+  // Final display list supporting both local keyword and AI semantic search results
+  const displayList = useMemo(() => {
+    if (!isAiSearch || aiSearchResults === null) {
+      return filteredList;
+    }
+    return aiSearchResults
+      .map(r => ({
+        ...r.transaction,
+        score: r.score
+      }))
+      .filter((t: any) => {
+        const matchesType = transactionTypeFilter === "all" || t.type === transactionTypeFilter;
+        const matchesCategory = selectedCategory === "all" || t.category === selectedCategory;
+        return matchesType && matchesCategory;
+      }) as Array<Transaction & { score?: number }>;
+  }, [isAiSearch, aiSearchResults, filteredList, transactionTypeFilter, selectedCategory]);
 
   // Spending breakdown by category
   const expenseByCategory = useMemo(() => {
@@ -490,26 +578,141 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
                 Riwayat Lengkap Pencatatan
               </h3>
               <p className={`text-[11px] ${ui.textMuted} mt-0.5`}>
-                Menemukan {filteredList.length} dari {transactions.length} total catatan Anda.
+                Menemukan {displayList.length} dari {transactions.length} total catatan Anda.
               </p>
             </div>
           </div>
 
           {/* Interactive Filters Bar */}
           <div className="space-y-3">
-            {/* Search inputs */}
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-slate-400">
-                <Search className="w-4 h-4" />
-              </span>
-              <input
-                type="text"
-                placeholder="Cari deskripsi transaksi atau kategori..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-9 pr-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
-              />
+            {/* AI Search Engine Toggle & Configuration Status */}
+            <div className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              isLight ? 'bg-slate-50 border-slate-200/60' : 'bg-slate-900/20 border-white/5'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  isAiSearch ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-400'
+                }`}>
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-xs font-bold ${ui.textMain} flex items-center gap-1.5`}>
+                    Pencarian Pintar AI
+                    {isAiSearch && qdrantConfig?.configured && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-extrabold animate-pulse uppercase">
+                        Qdrant Aktif
+                      </span>
+                    )}
+                  </h4>
+                  <p className={`text-[10px] ${ui.textMuted} mt-0.5`}>
+                    {isAiSearch 
+                      ? "Mencari dengan vektor & arti maksud kalimat (Qdrant)." 
+                      : "Pencarian kata kunci standar offline."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isAiSearch && qdrantConfig?.configured && (
+                  <button
+                    type="button"
+                    onClick={handleSyncQdrant}
+                    disabled={isSyncingQdrant}
+                    className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all outline-none border cursor-pointer select-none ${
+                      isLight 
+                        ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50' 
+                        : 'bg-slate-800/80 border-white/5 text-emerald-300 hover:bg-slate-850'
+                    }`}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isSyncingQdrant ? 'animate-spin' : ''}`} />
+                    {isSyncingQdrant ? "Menyinkron..." : "Sinkronisasi AI"}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !isAiSearch;
+                    setIsAiSearch(nextVal);
+                    if (!nextVal) {
+                      clearAiSearch();
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black cursor-pointer uppercase tracking-wider transition-all select-none ${
+                    isAiSearch 
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm' 
+                      : isLight 
+                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' 
+                        : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                  }`}
+                >
+                  {isAiSearch ? "Matikan AI" : "Aktifkan AI"}
+                </button>
+              </div>
             </div>
+
+            {/* If AI search is active but not configured in process.env, show helpful warning */}
+            {isAiSearch && qdrantConfig && !qdrantConfig.configured && (
+              <div className={`p-3.5 rounded-xl border flex gap-3 text-left ${
+                isLight ? 'bg-amber-50/50 border-amber-200/50 text-amber-900' : 'bg-amber-500/10 border-amber-500/15 text-amber-200'
+              }`}>
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-bold">Qdrant Belum Terhubung</p>
+                  <p className="text-[10px] opacity-90 leading-relaxed">
+                    Agar pencarian AI dapat bekerja, Anda harus menyetel <code className="font-mono bg-amber-500/10 px-1 py-0.5 rounded text-[9px] font-black">QDRANT_URL</code> di tab <strong>Settings &gt; Secrets</strong> (kanan atas AI Studio).
+                  </p>
+                  <div className="pt-1.5 font-mono text-[9px] opacity-80 break-all space-y-0.5 select-all">
+                    <div><strong>Gunakan API Key Qdrant berikut:</strong></div>
+                    <div className="bg-slate-900/10 dark:bg-slate-900/40 p-1.5 rounded text-[8px] leading-normal">{defaultQdrantKey}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Search input field element */}
+            <form onSubmit={handleSemanticSearch} className="relative flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-2.5 text-slate-400">
+                  <Search className="w-4 h-4" />
+                </span>
+                <input
+                  type="text"
+                  placeholder={isAiSearch ? "Ketik kalimat pencarian pintar (misal: jajanan enak sore-sore)..." : "Cari deskripsi transaksi atau kategori..."}
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    if (!isAiSearch) {
+                      // Normal keyword search behaves reactively
+                    }
+                  }}
+                  className={`w-full ${ui.inputBg} border ${ui.inputRadius} pl-9 pr-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none transition-shadow`}
+                />
+              </div>
+              {isAiSearch && (
+                <button
+                  type="submit"
+                  disabled={isSearchingAi || !qdrantConfig?.configured || !searchQuery.trim()}
+                  className={`px-4 py-2 font-black ${ui.inputRadius} text-xs flex items-center gap-1.5 cursor-pointer uppercase tracking-wider select-none transition-all ${
+                    isSearchingAi || !qdrantConfig?.configured || !searchQuery.trim()
+                      ? 'bg-slate-500/10 text-slate-400 cursor-not-allowed opacity-60'
+                      : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {isSearchingAi ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Mencari...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Cari
+                    </>
+                  )}
+                </button>
+              )}
+            </form>
 
             {/* Quick Type & Category selectors */}
             <div className="flex flex-wrap items-center gap-2">
@@ -550,12 +753,12 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
 
           {/* Transactions Cards list */}
           <div className="space-y-3.5 max-h-[380px] overflow-y-auto scrollbar-thin pr-1 pb-2">
-            {filteredList.length === 0 ? (
+            {displayList.length === 0 ? (
               <div className="text-center py-12 text-xs text-slate-400">
                 Tidak ada riwayat transaksi yang cocok dengan filter Anda.
               </div>
             ) : (
-              filteredList.slice().reverse().map((t, index) => {
+              (isAiSearch && aiSearchResults !== null ? displayList : displayList.slice().reverse()).map((t, index) => {
                 const itemKey = t.id || String(index);
                 const isSlidOpen = activeDeleteId === itemKey;
                 return (
@@ -625,12 +828,21 @@ export const BudgetDetails: React.FC<BudgetDetailsProps> = ({
                       {/* Description & metadata */}
                       <div className="flex-1 min-w-0 text-left pointer-events-none">
                         <p className={`text-xs font-bold ${ui.textMain} truncate`}>{t.description}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400 font-semibold">
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400 font-semibold flex-wrap">
                           <span className={`px-2 py-0.5 rounded bg-slate-500/10 text-[9px] font-extrabold uppercase`}>
                             {t.category}
                           </span>
                           <span>•</span>
                           <span>{t.date ? format(new Date(t.date), 'dd MMMM yyyy', { locale: id }) : ""}</span>
+                          {(t as any).score !== undefined && (
+                            <>
+                              <span>•</span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[9px] font-extrabold flex items-center gap-0.5 shrink-0">
+                                <Sparkles className="w-2.5 h-2.5 animate-pulse" />
+                                {Math.round((t as any).score * 100)}% Cocok
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 

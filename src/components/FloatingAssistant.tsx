@@ -16,6 +16,7 @@ interface FloatingAssistantProps {
   isGuest?: boolean;
   isEnabled: boolean;
   size: number;
+  userUid?: string;
 }
 
 export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
@@ -25,6 +26,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   isGuest = false,
   isEnabled,
   size,
+  userUid,
 }) => {
   if (!isEnabled) return null;
   const isDarkObj = themeMode === "dark" || themeMode === "cosmic";
@@ -35,21 +37,26 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [input, setInput] = useState("");
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasNewMessage, setHasNewMessage] = useState(false);
   const [isApiLimit, setIsApiLimit] = useState(false);
 
+  const isChatLoadingRef = useRef(false);
+  const stateUserRef = useRef<string | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const elementStart = useRef({ x: 0, y: 0 });
   const totalMove = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const assistantRef = useRef<HTMLDivElement>(null);
 
-  // Load chat history from localStorage on mount
+  // Load chat history from localStorage on userUid changes
   useEffect(() => {
-    setIsMobile(window.innerWidth < 768);
-    const saved = localStorage.getItem("owi_assistant_chat");
+    const currentChatUid = userUid || "anonymous";
+    isChatLoadingRef.current = true;
+    const chatKey = `owi_assistant_chat_${currentChatUid}`;
+    const saved = localStorage.getItem(chatKey);
     if (saved) {
       try {
         setMessages(JSON.parse(saved));
@@ -65,6 +72,14 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
         },
       ]);
     }
+    stateUserRef.current = currentChatUid;
+    setLoadedUid(currentChatUid);
+    isChatLoadingRef.current = false;
+  }, [userUid]);
+
+  // Handle positioning & window resize on mount
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768);
 
     // Set initial position on the bottom right of current window
     const initialX = window.innerWidth - (window.innerWidth < 768 ? 80 : 100);
@@ -86,10 +101,13 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
 
   // Save chat log to localStorage on update
   useEffect(() => {
+    const currentChatUid = userUid || "anonymous";
+    if (isChatLoadingRef.current || loadedUid !== currentChatUid || stateUserRef.current !== currentChatUid) return;
     if (messages.length > 0) {
-      localStorage.setItem("owi_assistant_chat", JSON.stringify(messages));
+      const chatKey = `owi_assistant_chat_${currentChatUid}`;
+      localStorage.setItem(chatKey, JSON.stringify(messages));
     }
-  }, [messages]);
+  }, [messages, userUid, loadedUid]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -238,7 +256,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
       ];
       setIsApiLimit(false);
       setMessages(defaultGreeting);
-      localStorage.setItem("owi_assistant_chat", JSON.stringify(defaultGreeting));
+      const chatKey = `owi_assistant_chat_${userUid || "anonymous"}`;
+      localStorage.setItem(chatKey, JSON.stringify(defaultGreeting));
     }
   };
 

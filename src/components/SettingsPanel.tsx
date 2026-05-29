@@ -136,7 +136,7 @@ export const SettingsPanel = ({
     emerald: { name: "Sage Green (Default)", color: "#6a8d73", secondary: "#e4ffe1" },
     blue: { name: "Elegant Royal Blue", color: "#3b82f6", secondary: "#ebf5ff" },
     purple: { name: "Cozy Lavender", color: "#8b5cf6", secondary: "#f5f3ff" },
-    rose: { name: "WhatsApprm Blossom Rose", color: "#f43f5e", secondary: "#fff1f2" },
+    rose: { name: "Warm Blossom Rose", color: "#f43f5e", secondary: "#fff1f2" },
     pink: { name: "Playful Sweet Pink", color: "#ec4899", secondary: "#fdf2f8" },
   };
 
@@ -156,7 +156,7 @@ export const SettingsPanel = ({
             </svg>
           </button>
           <div>
-            <h2 className={`text-2xl font-bold ${ui.textMain} tracking-tight`}>Pengaturan Kuanganku</h2>
+            <h2 className={`text-2xl font-bold ${ui.textMain} tracking-tight`}>Pengaturan Keuanganku</h2>
             <p className={`text-xs ${ui.textMuted}`}>Kelola profil, tampilan aplikasi, otomatisasi Bot WhatsApp & Excel GSheets</p>
           </div>
         </div>
@@ -225,8 +225,8 @@ export const SettingsPanel = ({
                   </label>
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <h4 className={`text-base font-bold ${ui.textMain}`}>{customName || user?.displayName || "Tamu Kuanganku"}</h4>
-                  <p className={`text-xs ${ui.textMuted}`}>{user?.email || "tamu.keuanganku@gmail.com"}</p>
+                  <h4 className={`text-base font-bold ${ui.textMain}`}>{customName || user?.displayName || "Pengguna"}</h4>
+                  <p className={`text-xs ${ui.textMuted}`}>{user?.email || ""}</p>
                   <label className={`mt-2.5 inline-flex text-xs px-3 py-1.5 font-semibold text-white ${theme.bgIcon} rounded-xl hover:opacity-90 active:scale-95 transition-all cursor-pointer`}>
                     Upload Foto Baru
                     <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
@@ -296,7 +296,7 @@ export const SettingsPanel = ({
                 </div>
                 <div>
                   <h3 className={`text-base font-bold ${ui.textMain}`}>Tema & Gaya Antarmuka</h3>
-                  <p className={`text-xs ${ui.textMuted}`}>Atur palet WhatsApprna utama, gaya bentuk tombol, and tema visual gelap/terang</p>
+                  <p className={`text-xs ${ui.textMuted}`}>Atur palet warna utama, gaya bentuk tombol, and tema visual gelap/terang</p>
                 </div>
               </div>
 
@@ -333,7 +333,7 @@ export const SettingsPanel = ({
 
               {/* Theme Color Palette Selector */}
               <div className="space-y-3">
-                <h4 className={`text-sm font-bold ${ui.textMain}`}>Pilihan Palet WhatsApprna</h4>
+                <h4 className={`text-sm font-bold ${ui.textMain}`}>Pilihan Palet Warna</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {Object.entries(colorPalettePreview).map(([key, item]) => {
                     const isSelected = themeMode === key;
@@ -367,7 +367,7 @@ export const SettingsPanel = ({
                   <CheckCircle2 className="w-4 h-4" /> Preview Harmonisasi Tampilan
                 </p>
                 <p className={`text-xs ${ui.textMuted} leading-relaxed`}>
-                  Aplikasi telah dikonfigurasi dengan font <strong>Space Grotesk</strong> (visual modern) berpadu bersama <strong>JetBrains Mono</strong> untuk kejelasan membaca data transaksi. Skema WhatsApprna otomatis menyesuaikan elemen charts, tombol input, & WhatsAppllpaper simulator WhatsApp.
+                  Aplikasi telah dikonfigurasi dengan font <strong>Space Grotesk</strong> (visual modern) berpadu bersama <strong>JetBrains Mono</strong> untuk kejelasan membaca data transaksi. Skema warna otomatis menyesuaikan elemen charts, tombol input, & wallpaper simulator WhatsApp.
                 </p>
               </div>
             </div>
@@ -411,6 +411,26 @@ export const SettingsPanel = ({
                     className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                   />
                   <p className={`text-[10px] ${ui.textMuted}`}>Skala saat ini: {assistantSize.toFixed(1)}x</p>
+                </div>
+
+                <div className="pt-4 border-t border-slate-200/50 dark:border-slate-800 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <span className={`text-[10px] font-bold ${ui.textMuted} uppercase tracking-wider`}>Konektivitas Model AI</span>
+                  <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/20 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                      </span>
+                      <p className={`text-xs font-bold ${ui.textMain}`}>Cloudflare Workers AI Aktif</p>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed font-semibold">
+                      Model cerdas <strong>@cf/meta/llama-3.1-8b-instruct</strong> terintegrasi penuh sebagai mesin berpikir utama &amp; fallback untuk asisten keuangan Owi.
+                    </p>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <span className="text-[10px] font-semibold bg-orange-500/20 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-md">API Terintegrasi</span>
+                      <span className="text-[10px] text-slate-500 font-mono">38fec09996ed...e2fd</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -462,7 +482,7 @@ export const SettingsPanel = ({
                     placeholder="Contoh: 08123456789 atau 628123456789"
                     className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow font-semibold`}
                   />
-                  <p className="text-[10px] text-slate-450 mt-1">Robot pengaWhatsApps akan mengirim WhatsApp ke Nomor ini saat rule terpicu.</p>
+                  <p className="text-[10px] text-slate-450 mt-1">Robot pengawas akan mengirim WhatsApp ke Nomor ini saat rule terpicu.</p>
                   <div className="mt-2 text-left p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed font-medium">
                     ⚠️ <strong>Penting:</strong> Pastikan Anda menggunakan versi WhatsApp aktif agar dapat menerima pesan via Fonnte API.
                   </div>
@@ -537,7 +557,7 @@ export const SettingsPanel = ({
 
                     <label className={`flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10 ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
                       <div className="flex flex-col pr-2">
-                        <span className={`text-sm font-bold ${ui.textMain}`}>PengaWhatsApps Limit Belanja Bulanan</span>
+                        <span className={`text-sm font-bold ${ui.textMain}`}>Pengawas Limit Belanja Bulanan</span>
                         <span className="text-[10px] text-slate-400 mt-0.5">Berikan peringatan otomatis via chat jika total pengeluaran meluap melompati budget bulanan</span>
                       </div>
                       <input
@@ -588,14 +608,14 @@ export const SettingsPanel = ({
                     className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-sm rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 disabled:opacity-50"
                   >
                     {isResetting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    {isResetting ? "Sedang Mengosongkan..." : "Reset Semua RiWhatsAppyat Keuangan"}
+                    {isResetting ? "Sedang Mengosongkan..." : "Reset Semua Riwayat Data Keuangan"}
                   </button>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800">
                 <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                  *Dengan menekan tombol hapus, Anda menyetujui bahWhatsApp Kuanganku tidak bertanggung jaWhatsAppb atas hilangnya data catatan tabungan Anda yang tidak dicadangkan sebelumnya.
+                  *Dengan menekan tombol hapus, Anda menyetujui bahwa Keuanganku tidak bertanggung jawab atas hilangnya data catatan tabungan Anda yang tidak dicadangkan sebelumnya.
                 </p>
               </div>
             </div>

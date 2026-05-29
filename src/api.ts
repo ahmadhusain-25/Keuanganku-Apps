@@ -68,8 +68,16 @@ const handleResponse = async (res: Response, defaultMessage: string) => {
   return res.json();
 };
 
-export const fetchFinances = async (spreadsheetId?: string | null) => {
+const getRequiredToken = async () => {
   const token = await getAccessToken();
+  if (!token) {
+    throw new Error("UNAUTHORIZED_SESSION_EXPIRED");
+  }
+  return token;
+};
+
+export const fetchFinances = async (spreadsheetId?: string | null) => {
+  const token = await getRequiredToken();
   const url = spreadsheetId && spreadsheetId !== "guest-spreadsheet" 
     ? getApiUrl(`/api/finances?spreadsheetId=${spreadsheetId}`) 
     : getApiUrl("/api/finances");
@@ -80,7 +88,7 @@ export const fetchFinances = async (spreadsheetId?: string | null) => {
 };
 
 export const fetchUserSpreadsheets = async () => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/drive/spreadsheets"), {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -88,7 +96,7 @@ export const fetchUserSpreadsheets = async () => {
 };
 
 export const scanGmailInvoices = async () => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/gmail/scan"), {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -96,7 +104,7 @@ export const scanGmailInvoices = async () => {
 };
 
 export const sendEmailReport = async (to: string, subject: string, htmlBody: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/gmail/send"), {
     method: "POST",
     headers: {
@@ -109,7 +117,7 @@ export const sendEmailReport = async (to: string, subject: string, htmlBody: str
 };
 
 export const fetchChatSpaces = async () => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/chat/spaces"), {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -117,7 +125,7 @@ export const fetchChatSpaces = async () => {
 };
 
 export const sendChatMessage = async (spaceId: string, text: string, card?: any) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/chat/message"), {
     method: "POST",
     headers: {
@@ -130,7 +138,7 @@ export const sendChatMessage = async (spaceId: string, text: string, card?: any)
 };
 
 export const addTransaction = async (data: Omit<Transaction, "id"> & { spreadsheetId: string }) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/finances"), {
     method: "POST",
     headers: { 
@@ -143,7 +151,7 @@ export const addTransaction = async (data: Omit<Transaction, "id"> & { spreadshe
 };
 
 export const addCalendarReminder = async (summary: string, description: string, dateStr: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const startDateTime = new Date(dateStr).toISOString();
   // 1 hour later
   const endDateTime = new Date(new Date(dateStr).getTime() + 60 * 60 * 1000).toISOString();
@@ -160,7 +168,7 @@ export const addCalendarReminder = async (summary: string, description: string, 
 };
 
 export const sendWANotification = async (phone: string, message: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/wa/notify"), {
     method: "POST",
     headers: { 
@@ -173,7 +181,7 @@ export const sendWANotification = async (phone: string, message: string) => {
 };
 
 export const fetchBudget = async (spreadsheetId: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl(`/api/budget?spreadsheetId=${spreadsheetId}`), {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -181,7 +189,7 @@ export const fetchBudget = async (spreadsheetId: string) => {
 };
 
 export const updateBudget = async (spreadsheetId: string, budget: number) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl("/api/budget"), {
     method: "POST",
     headers: { 
@@ -207,7 +215,7 @@ export const getAISummary = async (transactions: Transaction[]) => {
 };
 
 export const deleteTransaction = async (id: string, spreadsheetId: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl(`/api/finances/${id}?spreadsheetId=${spreadsheetId}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
@@ -216,7 +224,7 @@ export const deleteTransaction = async (id: string, spreadsheetId: string) => {
 };
 
 export const resetTransactions = async (spreadsheetId: string) => {
-  const token = await getAccessToken();
+  const token = await getRequiredToken();
   const res = await fetch(getApiUrl(`/api/finances?spreadsheetId=${spreadsheetId}`), {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` }
@@ -306,4 +314,38 @@ export const fetchAISuggestions = async (category: string, type: string) => {
     body: JSON.stringify({ category, type })
   });
   return handleResponse(res, "Failed to fetch AI suggestions");
+};
+
+export const fetchQdrantConfig = async () => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/qdrant/config"), {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return handleResponse(res, "Failed to fetch Qdrant configurations");
+};
+
+export const syncTransactionsToQdrant = async (transactions: Transaction[]) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/qdrant/sync"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ transactions })
+  });
+  return handleResponse(res, "Failed syncing transactions to Qdrant");
+};
+
+export const searchSemanticTransactions = async (query: string, limit?: number) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/qdrant/search"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query, limit })
+  });
+  return handleResponse(res, "Failed to search semantic transactions via Qdrant");
 };
