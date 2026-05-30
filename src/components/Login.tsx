@@ -111,6 +111,22 @@ export const Login = ({
                 </div>
               </div>
               
+              {loginError.message === "POPUP_BLOCKED" && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 leading-relaxed font-medium">
+                  <p className="font-bold flex items-center gap-1 mb-1">
+                    <LogIn className="w-3.5 h-3.5" /> Popup Diblokir:
+                  </p>
+                  Browser Anda memblokir jendela popup. Silakan gunakan metode redirect untuk masuk dengan Google.
+                  <Button 
+                    variant="link" 
+                    onClick={onRedirectLogin}
+                    className="p-0 h-auto text-[11px] font-bold text-blue-600 underline ml-1"
+                  >
+                    Gunakan Mode Redirect
+                  </Button>
+                </div>
+              )}
+              
               {loginError.code === "auth/operation-not-allowed" && (
                 <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed font-medium">
                   <p className="font-bold flex items-center gap-1 mb-1">
@@ -188,7 +204,10 @@ export const Login = ({
 
             <button
               type="button"
-              onClick={() => setAuthMode(authMode === "login" ? "signup" : "login")}
+              onClick={() => {
+                setAuthMode(authMode === "login" ? "signup" : "login");
+                if (clearError) clearError();
+              }}
               className="w-full text-center text-xs font-semibold text-slate-500 hover:text-[#6a8d73] transition-colors flex items-center justify-center gap-1 group"
             >
               {authMode === "login" ? "Belum punya akun? Daftar gratis" : "Sudah punya akun? Masuk disini"}

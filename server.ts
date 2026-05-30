@@ -576,44 +576,6 @@ async function startServer() {
     }
   });
 
-  app.post("/api/wa/notify", async (req, res) => {
-    try {
-      const { phone, message } = req.body;
-      if (!phone || !message) {
-        return res.status(400).json({ error: "Phone number and message are required." });
-      }
-
-      // Fonnte API Key provided by user
-      const fonnteToken = process.env.FONNTE_API_KEY || "o2ibg27orvbi75tc4fDi";
-
-      console.log(`[Fonnte Bot] Sending WA message to ${phone}...`);
-      
-      const params = new URLSearchParams();
-      params.append('target', phone);
-      params.append('message', message);
-      params.append('delay', '2'); // optional delay
-
-      const response = await fetch("https://api.fonnte.com/send", {
-        method: "POST",
-        headers: {
-          "Authorization": fonnteToken,
-        },
-        body: params
-      });
-
-      const responseData = await response.json();
-      
-      if (!responseData.status) {
-        throw new Error(responseData.reason || "Failed to send WA message via Fonnte");
-      }
-
-      return res.status(200).json({ success: true, fonnteResponse: responseData });
-    } catch (error: any) {
-      console.warn("[Fonnte Bot] Warning:", error.message);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  });
-
   // Drive Spreadsheet Picker Endpoint
   app.get("/api/drive/spreadsheets", async (req, res) => {
     try {

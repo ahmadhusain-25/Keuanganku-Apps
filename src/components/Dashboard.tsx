@@ -1056,7 +1056,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
             {/* Balances & Budgets Row */}
             <div className="space-y-4">
-              <section className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <section className={`grid grid-cols-2 ${monthlyBudget > 0 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
                 <div className={`bg-gradient-to-br ${theme.card} text-white p-5 ${ui.panelRadius} shadow-xl relative overflow-hidden transition-all duration-500 col-span-2 md:col-span-1`}>
                   <div className={`absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl`}></div>
                   <div className="flex items-center justify-between relative mb-1">
@@ -1095,38 +1095,42 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                   </div>
                   <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {totalExpense.toLocaleString("id-ID")}</h2>
                 </div>
-                <div 
-                  onClick={() => setActivePage("budget_detail")}
-                  className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500 col-span-2 md:col-span-1 cursor-pointer select-none group hover:border-emerald-550/40 hover:bg-emerald-500/[0.02] dark:hover:bg-emerald-950/10 active:scale-95`}
-                  title="Klik untuk detail budget & riwayat"
-                >
-                  <div className={`flex items-center gap-1.5 ${remainingBudget < 0 ? 'text-red-500' : theme.icon} mb-1`}>
-                    <Target className="w-4 h-4 transition-transform group-hover:scale-110" />
-                    <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
-                      Sisa Anggaran <span className="text-[9px] lowercase opacity-50 font-normal">• detail</span>
-                    </p>
+                {monthlyBudget > 0 && (
+                  <div 
+                    onClick={() => setActivePage("budget_detail")}
+                    className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col justify-center transition-all duration-500 col-span-2 md:col-span-1 cursor-pointer select-none group hover:border-emerald-550/40 hover:bg-emerald-500/[0.02] dark:hover:bg-emerald-950/10 active:scale-95`}
+                    title="Klik untuk detail budget & riwayat"
+                  >
+                    <div className={`flex items-center gap-1.5 ${remainingBudget < 0 ? 'text-red-500' : theme.icon} mb-1`}>
+                      <Target className="w-4 h-4 transition-transform group-hover:scale-110" />
+                      <p className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
+                        Sisa Anggaran <span className="text-[9px] lowercase opacity-50 font-normal">• detail</span>
+                      </p>
+                    </div>
+                    <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {remainingBudget.toLocaleString("id-ID")}</h2>
                   </div>
-                  <h2 className={`text-xl font-bold ${ui.textMain} tracking-tight`}>Rp {remainingBudget.toLocaleString("id-ID")}</h2>
-                </div>
+                )}
               </section>
 
               {/* Budget Progress Bar */}
-              <section className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col md:flex-row gap-6 items-center transition-all duration-500`}>
-                <div className="flex-1 w-full space-y-2.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className={`font-bold ${ui.textMain}`}>Batas Penggunaan Budget Belanja Bulanan</span>
-                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${budgetPercent > 100 ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-600 dark:text-green-400'}`}>
-                      {budgetPercent.toFixed(1)}% Terpakai
-                    </span>
+              <section className={`${ui.panelBg} border p-5 ${ui.panelRadius} flex flex-col md:flex-row gap-6 items-center transition-all duration-500 ${monthlyBudget <= 0 ? 'max-w-2xl mx-auto' : ''}`}>
+                {monthlyBudget > 0 && (
+                  <div className="flex-1 w-full space-y-2.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className={`font-bold ${ui.textMain}`}>Batas Penggunaan Budget Belanja Bulanan</span>
+                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${budgetPercent > 100 ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-600 dark:text-green-400'}`}>
+                        {budgetPercent.toFixed(1)}% Terpakai
+                      </span>
+                    </div>
+                    <div className={`h-3 w-full ${isLight ? 'bg-slate-100' : 'bg-slate-900'} rounded-full overflow-hidden border border-slate-500/5`}>
+                      <div 
+                        className={`h-full ${budgetPercent > 100 ? 'bg-red-500' : theme.bgIcon} transition-all duration-500`} 
+                        style={{ width: `${Math.min(budgetPercent, 100)}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className={`h-3 w-full ${isLight ? 'bg-slate-100' : 'bg-slate-900'} rounded-full overflow-hidden border border-slate-500/5`}>
-                    <div 
-                      className={`h-full ${budgetPercent > 100 ? 'bg-red-500' : theme.bgIcon} transition-all duration-500`} 
-                      style={{ width: `${Math.min(budgetPercent, 100)}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <div className="w-full md:w-72 leading-none flex flex-col justify-end text-left">
+                )}
+                <div className={`w-full ${monthlyBudget > 0 ? 'md:w-72' : 'md:w-full'} leading-none flex flex-col justify-end text-left`}>
                   <label className={`block text-[10px] font-bold ${ui.textMuted} mb-1.5 uppercase tracking-wider`}>Budget Bulanan</label>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">

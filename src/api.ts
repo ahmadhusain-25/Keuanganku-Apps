@@ -167,19 +167,6 @@ export const addCalendarReminder = async (summary: string, description: string, 
   return handleResponse(res, "Failed to add reminder");
 };
 
-export const sendWANotification = async (phone: string, message: string) => {
-  const token = await getRequiredToken();
-  const res = await fetch(getApiUrl("/api/wa/notify"), {
-    method: "POST",
-    headers: { 
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ phone, message })
-  });
-  return handleResponse(res, "Failed to send WA notification");
-};
-
 export const fetchBudget = async (spreadsheetId: string) => {
   const token = await getRequiredToken();
   const res = await fetch(getApiUrl(`/api/budget?spreadsheetId=${spreadsheetId}`), {

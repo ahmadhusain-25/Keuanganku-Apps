@@ -187,7 +187,13 @@ const handleLocalAuthFallback = async (email: string, pass: string, action: "sig
   } else {
     // signin
     const found = users[normalizedEmail];
-    if (!found || found.pass !== pass) {
+    if (!found) {
+      const err = new Error("Akun tidak ditemukan. Silakan hubungi admin atau daftar akun baru.");
+      (err as any).code = "auth/user-not-found";
+      throw err;
+    }
+    
+    if (found.pass !== pass) {
       const err = new Error("Alamat email atau kata sandi tidak cocok.");
       (err as any).code = "auth/wrong-password";
       throw err;

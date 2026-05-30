@@ -90,8 +90,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
       setPosition((prev) => {
-        const nextX = Math.max(10, Math.min(window.innerWidth - 85, prev.x));
-        const nextY = Math.max(10, Math.min(window.innerHeight - 85, prev.y));
+        const nextX = Math.max(10, Math.min(window.innerWidth - 70, prev.x));
+        const nextY = Math.max(10, Math.min(window.innerHeight - 70, prev.y));
         return { x: nextX, y: nextY };
       });
     };
@@ -141,8 +141,8 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
     const dy = e.clientY - dragStart.current.y;
     totalMove.current = Math.sqrt(dx * dx + dy * dy);
 
-    const nextX = Math.max(10, Math.min(window.innerWidth - 85, elementStart.current.x + dx));
-    const nextY = Math.max(10, Math.min(window.innerHeight - 85, elementStart.current.y + dy));
+    const nextX = Math.max(10, Math.min(window.innerWidth - 70, elementStart.current.x + dx));
+    const nextY = Math.max(10, Math.min(window.innerHeight - 70, elementStart.current.y + dy));
     setPosition({ x: nextX, y: nextY });
   };
 
@@ -304,7 +304,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className={`${isOpen ? "w-14 h-14" : isMobile ? "w-20 h-20" : "w-18 h-18"} rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible touch-none duration-150 ${
+          className={`${isOpen ? "w-11 h-11" : isMobile ? "w-16 h-16" : "w-14 h-14"} rounded-full flex items-center justify-center cursor-move shadow-2xl relative transition-all group overflow-visible touch-none duration-150 ${
             isDragging ? "scale-105 cursor-grabbing opacity-90" : "hover:scale-105 duration-300 pointer-events-auto"
           }`}
           style={{
@@ -318,7 +318,7 @@ export const FloatingAssistant: React.FC<FloatingAssistantProps> = ({
           <div className="absolute inset-0 rounded-full bg-transparent border-2 border-dashed border-emerald-400/20 group-hover:rotate-180 transition-transform duration-[6000ms] " />
 
           <OwiLogo
-            size={isOpen ? 44 : isMobile ? 68 : 56}
+            size={isOpen ? 34 : isMobile ? 54 : 44}
             className="transform transition-transform group-hover:scale-110 group-hover:-rotate-3 duration-300 animate-bobbing"
           />
 
