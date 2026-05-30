@@ -356,3 +356,17 @@ export const triggerNodemailerReport = async (
   return handleResponse(res, "Failed to compile the report");
 };
 
+export const scanBillWithAI = async (image: string) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/ai/scan-bill"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ image })
+  });
+  return handleResponse(res, "Failed to scan receipt/bill via AI");
+};
+
+

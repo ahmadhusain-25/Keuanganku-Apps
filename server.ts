@@ -263,7 +263,8 @@ function handleGoogleError(res: express.Response, e: any, contextMsg: string) {
 
 async function startServer() {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "20mb" }));
+  app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -1219,6 +1220,100 @@ Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Be
     } catch (e: any) {
       console.warn("AI suggestions failed: ", e.message || e);
       return res.json({ suggestions: fallbacks });
+    }
+  });
+
+  // AI Scan Bill / Receipt
+  app.post("/api/ai/scan-bill", async (req, res) => {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ error: "Gambar struk tidak ditemukan dalam data request" });
+    }
+
+    if (!ai) {
+      return res.status(400).json({ error: "Layanan Gemini AI tidak aktif atau konfigurasi kunci API (GEMINI_API_KEY) tidak ditemukan." });
+    }
+
+    try {
+      let base64Data = image;
+      let mimeType = "image/jpeg";
+
+      if (image.startsWith("data:")) {
+        const parts = image.split(";base64,");
+        if (parts.length === 2) {
+          mimeType = parts[0].replace("data:", "");
+          base64Data = parts[1];
+        }
+      }
+
+      console.log(`[Scan Bill] Scanning image with mimeType: ${mimeType}`);
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const prompt = `Analisis gambar struk, kuitansi, nota, bon, tagihan, atau bukti pembayaran berikut secara akurat.
+Tentukan apakah gambar ini berisi informasi transaksi keuangan:
+1. Tentukan jenis transaksi ("type"): "Expense" (Pengeluaran) atau "Income" (Pemasukan). Biasanya struk belanja / kuitansi makanan / tiket adalah "Expense".
+2. Tentukan nama toko atau deskripsi singkat transaksi ("description"), sebutkan detail signifikan (contoh: "Makan di KFC Graha Pena", "Belanja Indomaret", "Beli Pertamax"). Maksimal 5-7 kata.
+3. Cari jumlah total nominal biaya ("amount") yang dibayarkan. Ambil angka total akhir (Grand Total / Total Bayar / Net Total). Nilai harus berupa bilangan bulat positif (integer). Jangan menyertakan desimal atau sen.
+4. Cari tanggal transaksi ("date") dalam format standar "YYYY-MM-DD". Bila tidak terbaca tanggalnya, gunakan hari ini: "${todayStr}".
+5. Tentukan kategori terbaik ("category") yang sesuai dari daftar ini:
+   Pilihan Kategori Expense: "Makanan", "Transportasi", "Belanja", "Tagihan", "Hiburan", "Kesehatan", "Lainnya"
+   Pilihan Kategori Income: "Investasi", "Bonus", "Keuntungan", "Gaji", "Lainnya"
+
+Format hasil sebagai satu objek JSON murni:
+{
+  "isTransaction": true,
+  "type": "Expense",
+  "category": "Makanan",
+  "amount": 45000,
+  "description": "Makan di KFC Graha Pena",
+  "date": "2026-05-30"
+}
+Jika gambar bukan merupakan struk belanja, nota, atau bukti pembayaran bernominal, set "isTransaction" ke false.
+Balas HANYA dengan response JSON tersebut, tanpa pembungkus markdown (seperti \`\`\`json) dan tanpa teks tambahan.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64Data,
+              },
+            },
+            {
+              text: prompt,
+            },
+          ],
+        },
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const responseText = response.text?.trim() || "";
+      console.log(`[Scan Bill] AI Response: ${responseText}`);
+
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(responseText);
+      } catch (e) {
+        // Strip out codeblock markdown in case it ignored system config
+        let cleaned = responseText;
+        if (cleaned.includes("```")) {
+          cleaned = cleaned.replace(/```json/gi, "").replace(/```/g, "").trim();
+        }
+        parsedResult = JSON.parse(cleaned);
+      }
+
+      if (parsedResult) {
+        return res.json({ success: true, result: parsedResult });
+      } else {
+        throw new Error("Gagal mengurai respons AI");
+      }
+    } catch (err: any) {
+      console.error("[Scan Bill Error]", err);
+      return res.status(500).json({ error: `Gagal mendeteksi struk otomatis: ${err.message || err}` });
     }
   });
 

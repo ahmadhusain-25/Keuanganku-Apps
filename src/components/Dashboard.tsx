@@ -12,7 +12,8 @@ import {
   fetchUserSpreadsheets,
   fetchAISuggestions,
   fetchBudget,
-  updateBudget
+  updateBudget,
+  scanBillWithAI
 } from "../api";
 import { format, parseISO } from "date-fns";
 import { id } from "date-fns/locale";
@@ -60,6 +61,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { FloatingAssistant } from "./FloatingAssistant";
 import { googleSignIn } from "../auth";
 import { BudgetDetails } from "./BudgetDetails";
+import { GoogleChatBroadcast } from "./GoogleChatBroadcast";
 
 export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void }) => {
   const isGuest = !!(user?.isGuest || user?.isLocalFallback || !localStorage.getItem("google_access_token"));
@@ -89,6 +91,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   const [category, setCategory] = useState("Makanan");
   const [desc, setDesc] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // AI Bill / Receipt Scan States
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedImagePreview, setScannedImagePreview] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<any>(null);
 
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -710,6 +717,114 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     }
   };
 
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1600;
+          const MAX_HEIGHT = 1600;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          // Use JPEG with 0.7 quality to significantly reduce size while keeping text readable
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = (e) => reject(e);
+      };
+      reader.onerror = (e) => reject(e);
+    });
+  };
+
+  const handleImageScan = async (file: File) => {
+    if (!file) return;
+
+    try {
+      setIsScanning(true);
+      setScanResult(null);
+
+      // 1. First, create a low-res preview for the UI immediately
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScannedImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // 2. Compress image for AI processing
+      let base64String: string;
+      try {
+        base64String = await compressImage(file);
+      } catch (compressErr) {
+        console.error("Gagal kompresi, mencoba kirim asli:", compressErr);
+        // Fallback to original if compression fails
+        base64String = await new Promise((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result as string);
+          r.readAsDataURL(file);
+        });
+      }
+
+      // 3. Send to API
+      try {
+        const res = await scanBillWithAI(base64String);
+        if (res && res.success && res.result) {
+          const detectedValue = res.result;
+          if (detectedValue.isTransaction) {
+            setScanResult(detectedValue);
+            
+            // Automatically fill form values
+            setType(detectedValue.type || "Expense");
+            setCategory(detectedValue.category || "Makanan");
+            setAmount(String(detectedValue.amount || ""));
+            setDesc(detectedValue.description || "");
+            if (detectedValue.date) {
+              setDate(detectedValue.date);
+            }
+            showToast("AI berhasil mendeteksi data kuintansi otomatis! Silakan tinjau formulir transaksi.", "success");
+          } else {
+            showToast("Gambar dibaca oleh AI, namun tidak terdeteksi lampiran transaksi keuangan.", "info");
+            setScanResult({ isTransaction: false });
+          }
+        }
+      } catch (scanErr: any) {
+        console.error("Kesalahan deteksi AI:", scanErr);
+        const errorMessage = scanErr?.message || "Gagal mendeteksi otomatis menggunakan AI.";
+        if (errorMessage.includes("413") || errorMessage.toLowerCase().includes("large")) {
+          showToast("Gambar masih terlalu besar untuk diproses AI. Coba gunakan foto dengan resolusi lebih rendah.", "error");
+        } else {
+          showToast(errorMessage, "error");
+        }
+      } finally {
+        setIsScanning(false);
+      }
+    } catch (err: any) {
+      showToast("Gagal memproses berkas gambar: " + err.message, "error");
+      setIsScanning(false);
+    }
+  };
+
   const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reminderSummary || !reminderDate) {
@@ -938,7 +1053,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       <main className="flex-1 max-w-5xl mx-auto w-full p-4 md:p-6 space-y-6">
         {/* Error bar alert box */}
         {error && (
-          error === "UNAUTHORIZED_SESSION_EXPIRED" ? (
+          (error === "UNAUTHORIZED_SESSION_EXPIRED" || error.includes("401") || error.includes("invalid credentials")) ? (
             <div className={`p-6 rounded-3xl border mb-6 ${
               isLight 
                 ? "bg-amber-500/5 border-amber-500/20 text-slate-800" 
@@ -1492,6 +1607,191 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               {/* Left major side: transaction list and adder form */}
               <div className={`${activeMenuTab === "homepage" ? "lg:col-span-3" : "lg:col-span-2"} space-y-6`}>
                 
+                {/* AI Bill Scanner Component */}
+                {activeMenuTab === "features" && (
+                  <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-350 shadow-sm animate-fadeIn space-y-4`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div>
+                        <h3 className={`text-base font-extrabold ${ui.textMain} flex items-center gap-2`}>
+                          <Sparkles className="w-5 h-5 text-amber-500 animate-pulse animate-[pulse_2s_infinite]" /> Pindai Struk / Bukti Bayar Otomatis (AI)
+                        </h3>
+                        <p className={`text-xs ${ui.textMuted} mt-0.5`}>
+                          Unggah nota, kuitansi, bill, atau bukti transfer. Google Gemini AI akan membaca nominal, tanggal, kategori, dan mengisi formulir otomatis.
+                        </p>
+                      </div>
+                      <span className="inline-flex self-start sm:self-center items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Sparkles className="w-3 h-3" /> Powered by Gemini
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                      {/* Left Dropzone */}
+                      <div className="md:col-span-7 space-y-3">
+                        <div 
+                          className={`relative border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-all cursor-pointer flex flex-col items-center justify-center min-h-[160px] group ${
+                            isScanning 
+                              ? "border-amber-400 bg-amber-500/5 cursor-wait" 
+                              : "border-slate-200 dark:border-slate-800 hover:border-emerald-500 hover:bg-emerald-500/5"
+                          }`}
+                          onClick={() => {
+                            if (!isScanning) {
+                              const fileInput = document.getElementById("receipt-upload") as HTMLInputElement;
+                              if (fileInput) fileInput.click();
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (isScanning) return;
+                            const files = e.dataTransfer.files;
+                            if (files && files.length > 0) {
+                              handleImageScan(files[0]);
+                            }
+                          }}
+                        >
+                          <input 
+                            type="file" 
+                            id="receipt-upload" 
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden" 
+                            onChange={(e) => {
+                              const files = e.target.files;
+                              if (files && files.length > 0) {
+                                handleImageScan(files[0]);
+                              }
+                            }}
+                          />
+
+                          {isScanning ? (
+                            <div className="flex flex-col items-center gap-3">
+                              <div className="relative flex items-center justify-center">
+                                <RefreshCw className="w-10 h-10 text-amber-500 animate-spin" />
+                                <Sparkles className="absolute w-4 h-4 text-amber-400" />
+                              </div>
+                              <div className="space-y-1">
+                                <p className={`text-sm font-bold ${ui.textMain}`}>Menganalisis Gambar dengan AI...</p>
+                                <p className={`text-[10px] ${ui.textMuted}`}>Google Gemini sedang menguraikan nominal, kategori, dan detail bill Anda.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-3">
+                              <div className={`p-3 rounded-full bg-slate-50 dark:bg-slate-900 group-hover:bg-emerald-500/10 transition-colors`}>
+                                <FileText className={`w-8 h-8 ${ui.textMuted} group-hover:text-emerald-500 transition-colors`} />
+                              </div>
+                              <div>
+                                <p className={`text-xs sm:text-sm font-bold ${ui.textMain}`}>
+                                  Tarik & Lepas Foto atau <span className="text-emerald-500 hover:underline">Klik untuk Memilih / Kamera</span>
+                                </p>
+                                <p className={`text-[10px] ${ui.textMuted} mt-1`}>
+                                  Mendukung kamera HP, gambar PNG, JPG, JPEG (Maks. 10MB)
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tips footer */}
+                        <div className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-lg text-[11px]">
+                          <Info className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                          <div className={ui.textMuted}>
+                            <p className="font-bold text-slate-700 dark:text-slate-350">Tips Pengolahan Struk:</p>
+                            <p>Pastikan foto struk memiliki tulisan yang terbaca jelas, lurus, dan nominal serta nama toko tersorot cahaya secara layak.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Preview and details feedback */}
+                      <div className="md:col-span-5 h-full flex flex-col justify-between">
+                        {scannedImagePreview ? (
+                          <div className={`border border-slate-100 dark:border-slate-850 rounded-xl p-4 ${ui.panelBg} flex flex-col h-full justify-between gap-4 animate-scaleIn`}>
+                            <div>
+                              <span className={`text-[10px] font-extrabold ${ui.textMuted} uppercase tracking-wider block mb-2`}>
+                                Pratinjau & Hasil Deteksi AI
+                              </span>
+                              <div className="relative w-full h-28 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
+                                <img 
+                                  src={scannedImagePreview} 
+                                  alt="Pratinjau Kuitansi" 
+                                  className="max-h-full max-w-full object-contain"
+                                />
+                                {isScanning && (
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <div className="w-full h-1 bg-emerald-500/80 animate-[bounce_1.5s_infinite] shadow-lg shadow-emerald-500/50"></div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Deteksi AI Details */}
+                            {scanResult && scanResult.isTransaction && (
+                              <div className="bg-emerald-500/5 border border-emerald-500/25 rounded-lg p-3 space-y-2 text-xs">
+                                <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold mb-1">
+                                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                  <span>Berhasil Dideteksi Otomatis!</span>
+                                </div>
+                                <div className="grid grid-cols-3 gap-y-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                  <span className="col-span-1">Jenis:</span>
+                                  <span className="col-span-2 font-bold text-slate-800 dark:text-slate-200">
+                                    {scanResult.type === "Income" ? "📈 Pemasukan" : "📉 Pengeluaran"}
+                                  </span>
+                                  
+                                  <span className="col-span-1">Nominal:</span>
+                                  <span className="col-span-2 font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+                                    Rp {Number(scanResult.amount).toLocaleString("id-ID")}
+                                  </span>
+
+                                  <span className="col-span-1">Kategori:</span>
+                                  <span className="col-span-2 font-bold text-slate-850 dark:text-slate-200">
+                                    {scanResult.category}
+                                  </span>
+
+                                  <span className="col-span-1">Deskripsi:</span>
+                                  <span className="col-span-2 text-slate-800 dark:text-slate-200 font-semibold truncate" title={scanResult.description}>
+                                    {scanResult.description}
+                                  </span>
+
+                                  <span className="col-span-1">Tanggal:</span>
+                                  <span className="col-span-2 font-semibold text-slate-800 dark:text-slate-200">
+                                    {scanResult.date}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {scanResult && !scanResult.isTransaction && (
+                              <div className="bg-orange-500/5 border border-orange-500/15 rounded-lg p-3 text-xs text-orange-600 dark:text-orange-400">
+                                <p className="font-bold flex items-center gap-1">
+                                  <AlertTriangle className="w-4 h-4 shrink-0" /> Gambar Kurang Terbaca
+                                </p>
+                                <p className="text-[10px] mt-1 text-slate-500 dark:text-slate-400">
+                                  AI tidak menemukan data transaksi finansial valid dalam gambar ini. Silakan arahkan kamera lurus ke kertas struk Anda.
+                                </p>
+                              </div>
+                            )}
+
+                            {!scanResult && !isScanning && (
+                              <p className={`text-[10px] ${ui.textMuted} text-center italic`}>
+                                Data berhasil diekstrak! Tinjau dan edit formulir di bawah sebelum menyimpan.
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="border border-slate-100 dark:border-slate-800 rounded-xl p-5 text-center text-xs flex flex-col items-center justify-center h-full bg-slate-50/50 dark:bg-slate-900/10 min-h-[140px]">
+                            <Smartphone className={`w-8 h-8 ${ui.textMuted} mb-2`} />
+                            <p className={`font-bold ${ui.textMain}`}>Menunggu Foto Struk</p>
+                            <p className={`text-[10px] ${ui.textMuted} mt-1 max-w-[180px] mx-auto`}>
+                              Unggah foto struk Anda di sisi kiri untuk mendeteksi transaksi secara ajaib.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Form Adder Component */}
                 {activeMenuTab === "features" && (
                   <div ref={adderFormRef} className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 scroll-mt-20 shadow-sm animate-fadeIn`}>
@@ -2011,6 +2311,14 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     </div>
                   )}
                 </div>
+
+                {/* Google Chat Broadcast Integration */}
+                <GoogleChatBroadcast 
+                  aiSummary={aiSummary} 
+                  balanceInfo={`📊 Pendapatan: Rp ${totalIncome.toLocaleString("id-ID")}\n📉 Pengeluaran: Rp ${totalExpense.toLocaleString("id-ID")}\n🪙 Saldo: Rp ${balance.toLocaleString("id-ID")}`}
+                  ui={ui} 
+                  theme={theme} 
+                />
 
                 {/* Integration Calendar Events */}
                 <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 shadow-sm transition-colors`}>
