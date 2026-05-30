@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   User as UserIcon, 
   Palette, 
@@ -29,11 +30,6 @@ interface SettingsPanelProps {
   setCustomName: (name: string) => void;
   customPhoto: string;
   setCustomPhoto: (photo: string) => void;
-  phone: string;
-  setPhone: (phone: string) => void;
-  savedPhones?: string[];
-  handleSavePhone?: (num: string) => void;
-  handleRemovePhone?: (num: string) => void;
   dob: string;
   setDob: (dob: string) => void;
   themeMode: "blue" | "purple" | "emerald" | "rose" | "pink";
@@ -49,18 +45,10 @@ interface SettingsPanelProps {
   loadSpreadsheetsList: () => Promise<void>;
   customSpreadsheetId: string | null;
   handleCustomSpreadsheetChange: (sheetId: string) => Promise<void>;
-  waBotEnabled: boolean;
-  setWaBotEnabled: (enabled: boolean) => void;
-  waBotNotifyOnAdd: boolean;
-  setWaBotNotifyOnAdd: (enabled: boolean) => void;
-  waBotNotifyOnBudget: boolean;
-  setWaBotNotifyOnBudget: (enabled: boolean) => void;
   isAssistantEnabled: boolean;
   setIsAssistantEnabled: (enabled: boolean) => void;
   assistantSize: number;
   setAssistantSize: (size: number) => void;
-  handleCopyAppsScript: () => void;
-  copiedScript: boolean;
   handleResetTransactions: () => Promise<void>;
   isResetting: boolean;
   handleSaveProfile: (e: React.FormEvent) => void;
@@ -70,6 +58,7 @@ interface SettingsPanelProps {
   ui: any;
   theme: any;
   onBack: () => void;
+  transactions: any[];
 }
 
 export const SettingsPanel = ({
@@ -79,11 +68,6 @@ export const SettingsPanel = ({
   setCustomName,
   customPhoto,
   setCustomPhoto,
-  phone,
-  setPhone,
-  savedPhones = [],
-  handleSavePhone,
-  handleRemovePhone,
   dob,
   setDob,
   themeMode,
@@ -99,18 +83,10 @@ export const SettingsPanel = ({
   loadSpreadsheetsList,
   customSpreadsheetId,
   handleCustomSpreadsheetChange,
-  waBotEnabled,
-  setWaBotEnabled,
-  waBotNotifyOnAdd,
-  setWaBotNotifyOnAdd,
-  waBotNotifyOnBudget,
-  setWaBotNotifyOnBudget,
   isAssistantEnabled,
   setIsAssistantEnabled,
   assistantSize,
   setAssistantSize,
-  handleCopyAppsScript,
-  copiedScript,
   handleResetTransactions,
   isResetting,
   handleSaveProfile,
@@ -119,16 +95,16 @@ export const SettingsPanel = ({
   isCute,
   ui,
   theme,
-  onBack
+  onBack,
+  transactions
 }: SettingsPanelProps) => {
-  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "gsheets" | "aiAssistant" | "waBot" | "danger">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "appearance" | "gsheets" | "aiAssistant" | "danger">("profile");
 
   const menuItems = [
     { id: "profile", label: "Profil & Akun", icon: <UserIcon className="w-4 h-4" /> },
     { id: "appearance", label: "Tema & Desain", icon: <Palette className="w-4 h-4" /> },
     { id: "gsheets", label: "Penyimpanan GSheet", icon: <FolderOpen className="w-4 h-4" /> },
     { id: "aiAssistant", label: "Asisten AI", icon: <Sparkles className="w-4 h-4" /> },
-    { id: "waBot", label: "Bot WhatsApp & Notifikasi", icon: <MessageSquare className="w-4 h-4" /> },
     { id: "danger", label: "Reset Data", icon: <AlertTriangle className="w-4 h-4" /> },
   ] as const;
 
@@ -138,6 +114,93 @@ export const SettingsPanel = ({
     purple: { name: "Cozy Lavender", color: "#8b5cf6", secondary: "#f5f3ff" },
     rose: { name: "Warm Blossom Rose", color: "#f43f5e", secondary: "#fff1f2" },
     pink: { name: "Playful Sweet Pink", color: "#ec4899", secondary: "#fdf2f8" },
+  };
+
+  const [reportEmail, setReportEmail] = useState(() => localStorage.getItem("report_email") || user?.email || "");
+  const [reportFreq, setReportFreq] = useState(() => localStorage.getItem("report_freq") || "monthly");
+  const [reportEnabled, setReportEnabled] = useState(() => localStorage.getItem("report_enabled") === "true");
+  const [reportShouldEmail, setReportShouldEmail] = useState(() => {
+    const stored = localStorage.getItem("report_should_email");
+    return stored === null ? true : stored === "true";
+  });
+  const [reportShouldDownload, setReportShouldDownload] = useState(() => {
+    const stored = localStorage.getItem("report_should_download");
+    return stored === null ? true : stored === "true";
+  });
+  const [useCustomSmtp, setUseCustomSmtp] = useState(() => localStorage.getItem("report_use_smtp") === "true");
+  const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("report_smtp_host") || "smtp.gmail.com");
+  const [smtpPort, setSmtpPort] = useState(() => localStorage.getItem("report_smtp_port") || "587");
+  const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("report_smtp_user") || "");
+  const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("report_smtp_pass") || "");
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportMessage, setReportMessage] = useState({ text: "", type: "" });
+
+  const handleSaveReportSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem("report_email", reportEmail);
+    localStorage.setItem("report_freq", reportFreq);
+    localStorage.setItem("report_enabled", String(reportEnabled));
+    localStorage.setItem("report_should_email", String(reportShouldEmail));
+    localStorage.setItem("report_should_download", String(reportShouldDownload));
+    localStorage.setItem("report_use_smtp", String(useCustomSmtp));
+    localStorage.setItem("report_smtp_host", smtpHost);
+    localStorage.setItem("report_smtp_port", smtpPort);
+    localStorage.setItem("report_smtp_user", smtpUser);
+    localStorage.setItem("report_smtp_pass", smtpPass);
+    setReportMessage({ text: "Pengaturan Laporan Otomatis berhasil disimpan! 🦉💚", type: "success" });
+    setTimeout(() => setReportMessage({ text: "", type: "" }), 4000);
+  };
+
+  const handleTestSendReport = async () => {
+    if (reportShouldEmail && !reportEmail) {
+      setReportMessage({ text: "Alamat email tujuan wajib diisi jika Anda mengaktifkan opsi kirim via Email.", type: "error" });
+      return;
+    }
+    if (!reportShouldEmail && !reportShouldDownload) {
+      setReportMessage({ text: "Pilih setidaknya salah satu tindakan: Kirim via Email atau Unduh PDF secara langsung.", type: "error" });
+      return;
+    }
+
+    setReportLoading(true);
+    setReportMessage({ text: "Sedang mengolah dan mempersiapkan laporan PDF Anda...", type: "info" });
+    try {
+      const customSmtpObj = useCustomSmtp ? {
+        host: smtpHost,
+        port: Number(smtpPort),
+        user: smtpUser,
+        pass: smtpPass
+      } : {};
+
+      const { triggerNodemailerReport } = await import("../api");
+      const res = await triggerNodemailerReport(
+        reportEmail,
+        transactions,
+        customSmtpObj,
+        reportShouldEmail,
+        reportShouldDownload
+      );
+
+      // Trigger directly on the client side if requested
+      if (reportShouldDownload && res.pdfData) {
+        const linkSource = `data:application/pdf;base64,${res.pdfData}`;
+        const downloadLink = document.createElement("a");
+        downloadLink.href = linkSource;
+        downloadLink.download = res.filename || `Laporan_Keuanganku.pdf`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
+
+      setReportMessage({ 
+        text: res.message || "Proses penyusunan & pengiriman laporan selesai!", 
+        type: "success" 
+      });
+    } catch (err: any) {
+      console.error(err);
+      setReportMessage({ text: err.message || "Gagal memproses laporan. Periksa SMTP config atau coba lagi.", type: "error" });
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   return (
@@ -157,7 +220,7 @@ export const SettingsPanel = ({
           </button>
           <div>
             <h2 className={`text-2xl font-bold ${ui.textMain} tracking-tight`}>Pengaturan Keuanganku</h2>
-            <p className={`text-xs ${ui.textMuted}`}>Kelola profil, tampilan aplikasi, otomatisasi Bot WhatsApp & Excel GSheets</p>
+            <p className={`text-xs ${ui.textMuted}`}>Kelola profil, tampilan aplikasi, dan penyimpanan GSheets</p>
           </div>
         </div>
         <button 
@@ -197,7 +260,16 @@ export const SettingsPanel = ({
 
         {/* Right Hand Settings Detail Panel content */}
         <div className="lg:col-span-3">
-          {activeTab === "profile" && (
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 12, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.99 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="w-full"
+            >
+              {activeTab === "profile" && (
             <form onSubmit={handleSaveProfile} className={`${ui.panelBg} backdrop-blur-xl border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
               <div className="flex items-center gap-3 border-b pb-4 border-slate-200/50 dark:border-slate-800">
                 <div className={`p-2.5 rounded-xl ${theme.bg1} ${theme.icon}`}>
@@ -248,7 +320,7 @@ export const SettingsPanel = ({
                   />
                 </div>
                 <div>
-                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>WhatsApp Terhubung</label>
+                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>Akun Terhubung (Email)</label>
                   <input 
                     type="email"
                     value={user?.email || "tamu@keuanganku.local"}
@@ -256,16 +328,6 @@ export const SettingsPanel = ({
                     className={`w-full ${ui.inputBg} opacity-60 border ${ui.inputRadius} px-4 py-3 text-sm cursor-not-allowed outline-none font-semibold`}
                   />
                   <p className="text-[10px] text-slate-400 mt-1">Digunakan sebagai pengenal kunci sinkronisasi</p>
-                </div>
-                <div>
-                  <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>No. WhatsApp Notifikasi</label>
-                  <input 
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="Contoh: 08123456789"
-                    className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 ${theme.focus} outline-none transition-shadow font-semibold`}
-                  />
                 </div>
                 <div>
                   <label className={`block text-xs font-bold ${ui.textMuted} mb-1.5`}>Tanggal Lahir</label>
@@ -436,145 +498,65 @@ export const SettingsPanel = ({
             </div>
           )}
 
-          {activeTab === "waBot" && (
+
+
+          {activeTab === "gsheets" && (
             <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
-              <div className="flex items-center justify-between border-b pb-4 border-slate-200/50 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-500">
-                    <MessageSquare className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className={`text-base font-bold ${ui.textMain}`}> WhatsApp Bot & Otomatisasi</h3>
-                    <p className={`text-xs ${ui.textMuted}`}>Konfigurasi status bot, chat ID tujuan, and rule pemicu bot otomatis</p>
-                  </div>
+              <div className="flex items-center gap-3 border-b pb-4 border-slate-200/50 dark:border-slate-800">
+                <div className={`p-2.5 rounded-xl ${theme.bg1} ${theme.icon}`}>
+                  <FolderOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-bold ${ui.textMain}`}>Penyimpanan Google Sheets</h3>
+                  <p className={`text-xs ${ui.textMuted}`}>Sinkronisasikan seluruh catatan transaksi keuangan Anda langsung dengan Cloud Google Sheets</p>
                 </div>
               </div>
 
-              {/* Bot Destination Number */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <label className={`block text-xs font-bold ${ui.textMuted}`}>Nomor WhatsApp Tujuan</label>
-                    <div className="flex gap-1.5">
-                      {phone.trim() && !savedPhones.includes(phone.trim()) && handleSavePhone && (
-                        <button
-                          type="button"
-                          onClick={() => handleSavePhone(phone)}
-                          className="text-[10px] bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
-                        >
-                          Simpan
-                        </button>
-                      )}
+              {user?.isGuest || user?.isLocalFallback ? (
+                <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <h4 className={`text-sm font-bold ${ui.textMain}`}>Fitur Memerlukan Akun Google</h4>
+                  </div>
+                  <p className={`text-xs ${ui.textMuted} leading-relaxed font-medium`}>
+                    Saat ini Anda masuk menggunakan sesi <strong>Tamu / Sesi Lokal</strong>. Fitur sinkronisasi otomatis Google Sheets cloud ini hanya tersedia bagi Anda yang melakukan login menggunakan akun Google agar aplikasi memiliki izin aman untuk memperbarui berkas spreadsheet di Google Drive Anda.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className={`block text-xs font-bold ${ui.textMuted}`}>Pilih Berkas Spreadsheet Aktif</label>
+                    <div className="flex items-center gap-3">
+                      <select
+                        value={customSpreadsheetId || "monthly"}
+                        onChange={(e) => handleCustomSpreadsheetChange(e.target.value)}
+                        className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 ${theme.focus} outline-none cursor-pointer font-bold`}
+                      >
+                        <option value="monthly">📂 Koleksi Bulanan Otomatis</option>
+                        {spreadsheetsList.map(item => (
+                          <option key={item.id} value={item.id}>📄 {item.name}</option>
+                        ))}
+                      </select>
                       <button
                         type="button"
-                        onClick={() => { setPhone(""); }}
-                        className="text-[10px] bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        onClick={loadSpreadsheetsList}
+                        disabled={loadingSpreadsheets}
+                        className={`p-3 rounded-2xl border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'} transition-all`}
+                        title="Segarkan Berkas Spreadsheet"
                       >
-                        Tambah Baru
+                        <RefreshCw className={`w-4 h-4 ${loadingSpreadsheets ? 'animate-spin' : ''}`} />
                       </button>
                     </div>
+                    <p className={`text-[10px] ${ui.textMuted}`}>Pilih spreadsheet yang ingin Anda gunakan untuk pencatatan transaksi Anda saat ini.</p>
                   </div>
 
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="Contoh: 08123456789 atau 628123456789"
-                    className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-shadow font-semibold`}
-                  />
-                  <p className="text-[10px] text-slate-450 mt-1">Robot pengawas akan mengirim WhatsApp ke Nomor ini saat rule terpicu.</p>
-                  <div className="mt-2 text-left p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed font-medium">
-                    ⚠️ <strong>Penting:</strong> Pastikan Anda menggunakan versi WhatsApp aktif agar dapat menerima pesan via Fonnte API.
-                  </div>
 
-                  {savedPhones.length > 0 && (
-                    <div className="pt-1.5">
-                      <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>ID Tersimpan (klik untuk memilih):</span>
-                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                        {savedPhones.map((num) => (
-                          <div 
-                            key={num} 
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border select-none ${
-                              phone === num 
-                                ? "bg-blue-500/15 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold" 
-                                : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-600 dark:text-slate-400`
-                            }`}
-                          >
-                            <span 
-                              className="cursor-pointer font-bold text-[11px]" 
-                              onClick={() => setPhone(num)}
-                            >
-                              {num}
-                            </span>
-                            {handleRemovePhone && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePhone(num)}
-                                className="text-slate-400 hover:text-red-500 transition-colors ml-0.5 p-0.5"
-                                title="Hapus"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-
-                <div className="border-t pt-4 border-slate-200/50 dark:border-slate-800 space-y-3">
-                  <h4 className={`text-sm font-bold ${ui.textMain} tracking-wide`}>Automation Rules & Triggers</h4>
-                  <p className="text-[11px] text-slate-400">Nyalakan alarm otomatis untuk memantau budget finansial Anda secara real-time</p>
-
-                  <div className="space-y-2.5">
-                    <label className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10">
-                      <div className="flex flex-col pr-2">
-                        <span className={`text-sm font-bold ${ui.textMain}`}>Aktifkan Engine Bot</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">Nyalakan respon otomatis via WhatsApp</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={waBotEnabled}
-                        onChange={e => setWaBotEnabled(e.target.checked)}
-                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
-                      />
-                    </label>
-
-                    <label className={`flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10 ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
-                      <div className="flex flex-col pr-2">
-                        <span className={`text-sm font-bold ${ui.textMain}`}>Notifikasi Transaksi Baru</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">Infokan otomatis ke WhatsApp setiap kali ada pemasukan/pengeluaran baru</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={waBotNotifyOnAdd}
-                        onChange={e => setWaBotNotifyOnAdd(e.target.checked)}
-                        disabled={!waBotEnabled}
-                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
-                      />
-                    </label>
-
-                    <label className={`flex items-center justify-between p-3.5 rounded-2xl bg-slate-500/5 hover:bg-slate-500/10 transition-colors cursor-pointer border border-slate-500/10 ${!waBotEnabled && 'opacity-50 pointer-events-none'}`}>
-                      <div className="flex flex-col pr-2">
-                        <span className={`text-sm font-bold ${ui.textMain}`}>Pengawas Limit Belanja Bulanan</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">Berikan peringatan otomatis via chat jika total pengeluaran meluap melompati budget bulanan</span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={waBotNotifyOnBudget}
-                        onChange={e => setWaBotNotifyOnBudget(e.target.checked)}
-                        disabled={!waBotEnabled}
-                        className="rounded text-blue-500 focus:ring-blue-500 cursor-pointer h-4.5 w-4.5 accent-blue-650"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-
-              </div>
+              )}
             </div>
           )}
+
+
 
           {activeTab === "danger" && (
             <div className={`${ui.panelBg} border ${ui.panelRadius} p-6 sm:p-8 space-y-6 transition-all duration-500`}>
@@ -620,6 +602,8 @@ export const SettingsPanel = ({
               </div>
             </div>
           )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>

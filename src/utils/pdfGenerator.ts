@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { Transaction } from '../api';
@@ -112,7 +112,7 @@ export const generateFinancialReport = ({
     t.description || '-'
   ]);
   
-  (doc as any).autoTable({
+  autoTable(doc, {
     startY: 115,
     head: [['#', 'Tanggal', 'Jenis', 'Kategori', 'Nominal', 'Keterangan']],
     body: tableData,

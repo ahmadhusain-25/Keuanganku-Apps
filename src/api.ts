@@ -349,3 +349,23 @@ export const searchSemanticTransactions = async (query: string, limit?: number) 
   });
   return handleResponse(res, "Failed to search semantic transactions via Qdrant");
 };
+
+export const triggerNodemailerReport = async (
+  email: string,
+  transactions: Transaction[],
+  customSmtp?: { host?: string; port?: number; user?: string; pass?: string },
+  shouldEmail?: boolean,
+  shouldDownload?: boolean
+) => {
+  const token = await getAccessToken();
+  const res = await fetch(getApiUrl("/api/reports/send-nodemailer"), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email, transactions, customSmtp, shouldEmail, shouldDownload })
+  });
+  return handleResponse(res, "Failed to compile the report");
+};
+

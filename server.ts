@@ -5,6 +5,9 @@ import { google } from "googleapis";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import OpenAI from "openai";
 import { QdrantClient } from "@qdrant/js-client-rest";
+import nodemailer from "nodemailer";
+import { parseISO, isSameMonth, format } from "date-fns";
+import { jsPDF } from "jspdf";
 
 const PORT = 3000;
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ 
@@ -1468,6 +1471,528 @@ Format hasil dalam bentuk list array JSON sederhana, contoh: ["Makan Siang", "Be
     } catch (e: any) {
       console.error("[Qdrant Exception] Search error: ", e);
       res.status(500).json({ error: e.message || "Failed querying Qdrant" });
+    }
+  });
+
+  // Send Nodemailer Periodic Monthly Report PDF
+  app.post("/api/reports/send-nodemailer", async (req, res) => {
+    try {
+      const { email, transactions = [], customSmtp = {}, shouldEmail = true, shouldDownload = true } = req.body;
+
+      if (shouldEmail && !email) {
+        return res.status(400).json({ error: "Alamat email penerima diperlukan jika Anda memilih untuk mengirim via email." });
+      }
+
+      // Filter monthly transactions using date-fns
+      const now = new Date();
+      const monthlyTransactions = transactions.filter((tx: any) => {
+        try {
+          if (!tx.date) return false;
+          const txDate = parseISO(tx.date);
+          return isSameMonth(txDate, now);
+        } catch (err) {
+          return false;
+        }
+      });
+
+      // Calculate totals
+      let totalIncome = 0;
+      let totalExpense = 0;
+      monthlyTransactions.forEach((tx: any) => {
+        const amt = Number(tx.amount) || 0;
+        if (tx.type === "Income") {
+          totalIncome += amt;
+        } else {
+          totalExpense += amt;
+        }
+      });
+      const netSavings = totalIncome - totalExpense;
+
+      // Generate PDF
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // Style constants
+      const primaryColor = [67, 104, 80]; // Deep Sage Forest Green #436850
+      const subPrimaryColor = [106, 141, 115]; // Sage #6a8d73
+      const darkColor = [30, 41, 59]; // slate-800
+      const accentGreen = [22, 163, 74]; // green-600
+      const accentRed = [220, 38, 38]; // red-600
+      const accentBlue = [37, 99, 235]; // blue-600
+
+      // Stats helpers
+      const incomeTransactions = monthlyTransactions.filter((tx: any) => tx.type === "Income");
+      const expenseTransactions = monthlyTransactions.filter((tx: any) => tx.type === "Expense");
+      const incomeCount = incomeTransactions.length;
+      const expenseCount = expenseTransactions.length;
+      const transactionTotalCount = monthlyTransactions.length;
+
+      const savingsRate = totalIncome > 0 ? Math.round(((totalIncome - totalExpense) / totalIncome) * 100) : 0;
+      const expenseRatio = totalIncome > 0 ? Math.round((totalExpense / totalIncome) * 100) : 0;
+
+      // Category expenses calculation
+      const categoryMap: { [key: string]: number } = {};
+      monthlyTransactions.forEach((tx: any) => {
+        if (tx.type === "Expense") {
+          const cat = tx.category || "Lainnya";
+          categoryMap[cat] = (categoryMap[cat] || 0) + (Number(tx.amount) || 0);
+        }
+      });
+      const sortedCategories = Object.entries(categoryMap)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+
+      // ==========================================
+      // HALAMAN 1: RINGKASAN EKSEKUTIF FINANSIAL
+      // ==========================================
+
+      // Brand Header Solid Banner
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, 210, 45, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text("KEUANGANKU", 15, 18);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("Laporan Finansial & Analisis Eksekutif Bulanan Otomatis", 15, 25);
+      
+      const printedPeriod = format(now, "MMMM yyyy");
+      const printedTimeStr = format(now, "dd MMMM yyyy HH:mm");
+      doc.text(`Periode Laporan: ${printedPeriod}  |  Waktu Cetak: ${printedTimeStr}`, 15, 32);
+
+      // KPIs - 3 Grid Cards Side-by-Side
+      // Card 1: Pemasukan
+      doc.setFillColor(242, 248, 243); // Soft tint of green
+      doc.roundedRect(15, 52, 56, 30, 3, 3, "F");
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("TOTAL PEMASUKAN", 20, 59);
+      doc.setTextColor(accentGreen[0], accentGreen[1], accentGreen[2]);
+      doc.setFontSize(11);
+      doc.text(`Rp ${totalIncome.toLocaleString("id-ID")}`, 20, 68);
+      doc.setTextColor(100, 116, 139);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(`${incomeCount} Transaksi Pemasukan`, 20, 75);
+
+      // Card 2: Pengeluaran
+      doc.setFillColor(254, 242, 242); // Soft tint of red
+      doc.roundedRect(77, 52, 56, 30, 3, 3, "F");
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("TOTAL PENGELUARAN", 82, 59);
+      doc.setTextColor(accentRed[0], accentRed[1], accentRed[2]);
+      doc.setFontSize(11);
+      doc.text(`Rp ${totalExpense.toLocaleString("id-ID")}`, 82, 68);
+      doc.setTextColor(100, 116, 139);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(`${expenseCount} Transaksi Pengeluaran`, 82, 75);
+
+      // Card 3: Saldo Bersih
+      doc.setFillColor(240, 246, 252); // Soft tint of blue
+      doc.roundedRect(139, 52, 56, 30, 3, 3, "F");
+      doc.setTextColor(30, 41, 59);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.text("SISA SALDO BERSIH", 144, 59);
+      const isPositive = netSavings >= 0;
+      const savingsCol = isPositive ? accentGreen : accentRed;
+      doc.setTextColor(savingsCol[0], savingsCol[1], savingsCol[2]);
+      doc.setFontSize(11);
+      doc.text(`Rp ${netSavings.toLocaleString("id-ID")}`, 144, 68);
+      doc.setTextColor(100, 116, 139);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text(`Rasio Simpanan: ${savingsRate}%`, 144, 75);
+
+      // Section Dividers & Two columns layout
+      // COLUMN 1: Kesehatan Finansial (Kiri)
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(15, 90, 85, 82, 4, 4, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(15, 90, 85, 82, 4, 4, "D");
+
+      doc.setTextColor(15, 23, 42); // slate-900
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.text("Rasio & Kesehatan Finansial", 20, 97);
+      
+      doc.setDrawColor(226, 232, 240);
+      doc.line(20, 100, 95, 100);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text("Efisiensi Anggaran (Rasio Belanja):", 20, 107);
+
+      // Progress bar background
+      doc.setFillColor(226, 232, 240);
+      doc.roundedRect(20, 111, 75, 4, 2, 2, "F");
+
+      // Progress bar fill
+      const clampedRatio = Math.min(Math.max(expenseRatio, 0), 100);
+      const progressBarWidth = clampedRatio * 0.75; // 75mm is max
+      const barColor = clampedRatio > 80 ? accentRed : clampedRatio > 50 ? [217, 119, 6] : accentGreen;
+      doc.setFillColor(barColor[0], barColor[1], barColor[2]);
+      doc.roundedRect(20, 111, progressBarWidth, 4, 2, 2, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(barColor[0], barColor[1], barColor[2]);
+      doc.text(`${expenseRatio}% dari Pemasukan terpakai`, 20, 121);
+
+      // Financial assessment description
+      let healthTitle = "";
+      let healthDesc = "";
+      let healthColor = accentGreen;
+      if (savingsRate >= 40) {
+        healthTitle = "Sangat Sehat (Excellent)";
+        healthDesc = "Rasio menabung yang luar biasa tangguh! Anda memiliki kecukupan sisa dana yang melimpah untuk diversifikasi investasi.";
+        healthColor = accentGreen;
+      } else if (savingsRate >= 20) {
+        healthTitle = "Sehat & Seimbang (Healthy)";
+        healthDesc = "Sesuai dengan standard ideal penabungan 20%. Pola konsumsi teratur dan kondisi keamanan kas memadai.";
+        healthColor = accentBlue;
+      } else if (savingsRate >= 0) {
+        healthTitle = "Butuh Perhatian (Caution)";
+        healthDesc = "Hampir seluruh pendapatan amblas terpakai. Cobalah untuk menyisir dan mengevaluasi kembali biaya non-primer.";
+        healthColor = [217, 119, 6];
+      } else {
+        healthTitle = "Defisit Anggaran (Critical)";
+        healthDesc = "Pengeluaran melampaui limit pemasukan Anda bulan ini! Segera batasi pos opsional untuk menutup arus kas negatif.";
+        healthColor = accentRed;
+      }
+
+      doc.setFillColor(healthColor[0], healthColor[1], healthColor[2]);
+      doc.circle(22, 131, 1.5, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(healthColor[0], healthColor[1], healthColor[2]);
+      doc.text(healthTitle, 26, 132);
+
+      const wrappedHealthDesc = doc.splitTextToSize(healthDesc, 75);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(71, 85, 105);
+      doc.text(wrappedHealthDesc, 20, 139);
+
+      // COLUMN 2: Distribusi Kategori Biaya Terbesar (Kanan)
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(110, 90, 85, 82, 4, 4, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(110, 90, 85, 82, 4, 4, "D");
+
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.text("Kategori Pengeluaran Terbesar", 115, 97);
+      
+      doc.line(115, 100, 190, 100);
+
+      if (sortedCategories.length === 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text("Tidak ada aktivitas biaya terdeteksi.", 118, 115);
+      } else {
+        let categoryY = 108;
+        sortedCategories.slice(0, 3).forEach((cat: any, i: number) => {
+          const ratio = totalExpense > 0 ? (cat.value / totalExpense) * 100 : 0;
+          
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(8.5);
+          doc.setTextColor(30, 41, 59);
+          doc.text(`${i + 1}. ${cat.name}`, 115, categoryY);
+
+          const valueAndPercent = `Rp ${cat.value.toLocaleString("id-ID")} (${Math.round(ratio)}%)`;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(100, 116, 139);
+          doc.text(valueAndPercent, 155, categoryY);
+
+          // Draw progress bar
+          doc.setFillColor(226, 232, 240);
+          doc.roundedRect(115, categoryY + 2.5, 70, 3, 1.5, 1.5, "F");
+
+          const catFillWidth = (ratio / 100) * 70;
+          doc.setFillColor(subPrimaryColor[0], subPrimaryColor[1], subPrimaryColor[2]);
+          doc.roundedRect(115, categoryY + 2.5, catFillWidth, 3, 1.5, 1.5, "F");
+
+          categoryY += 19;
+        });
+      }
+
+      // BOTTOM ROW: Smart Highlights / Recommendations Box
+      doc.setFillColor(242, 246, 243); // Soft Sage Tint BG
+      doc.roundedRect(15, 180, 180, 85, 4, 4, "F");
+      doc.setDrawColor(204, 224, 209);
+      doc.roundedRect(15, 180, 180, 85, 4, 4, "D");
+
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      doc.text("Analisis Tren & Rekomendasi Pintar Asisten", 22, 188);
+
+      doc.setDrawColor(204, 224, 209);
+      doc.line(22, 192, 188, 192);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text("Catatan Strategis Untuk Bulan Depan:", 22, 199);
+
+      // Bullet recommendations with wrapping support
+      const bullet1Desc = `Kestabilan Sisa Kas: Hasil simpanan bersih Anda sebesar Rp ${netSavings.toLocaleString("id-ID")} (${savingsRate}%) berada pada klasifikasi ${healthTitle}. Biasakan mengamankan porsi dana darurat setara 3 bulan pengeluaran wajib terlebih dahulu.`;
+      const bullet2Desc = `Pengendalian Biaya: Kategori '${sortedCategories[0]?.name || "Utama"}' menyerap pengeluaran terbesar senilai Rp ${(sortedCategories[0]?.value || 0).toLocaleString("id-ID")}. Cobalah melakukan pemantauan ketat & eliminasi bertahap pada tagihan impulsif.`;
+      const bullet3Desc = `Teknik Budgeting Mandiri: Pertimbangkan metode pembagian budgeting instan 50% Kebutuhan Primer, 30% Keinginan Opsional, serta minimal 20% khusus Investasi/Tabungan untuk mendisiplinkan arus kas bulanan Anda.`;
+      const bullet4Desc = `Pencatatan Berkelanjutan: Maksimalkan pelacakan harian Anda secara real-time via WhatsApp Bot Keuanganku. Konsistensi kecil mencatat pengeluaran harian akan membentuk refleks keuangan yang matang.`;
+
+      const bulletList = [
+        { label: "1. Kestabilan Tabungan", val: bullet1Desc },
+        { label: "2. Pengendalian Biaya", val: bullet2Desc },
+        { label: "3. Metode Anggaran", val: bullet3Desc },
+        { label: "4. Pelacakan Konsisten", val: bullet4Desc }
+      ];
+
+      let bulletY = 205;
+      bulletList.forEach((bl) => {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(bl.label, 22, bulletY);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        const wrappedBulletText = doc.splitTextToSize(bl.val, 166);
+        doc.text(wrappedBulletText, 25, bulletY + 4);
+        bulletY += 13.5;
+      });
+
+      // Page 1 Footer
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text("Laporan Keuanganku - Ringkasan Analitis Eksekutif Bulanan", 15, 285);
+      doc.text("Halaman 1 dari 2", 182, 285);
+
+      // ==========================================
+      // HALAMAN 2: RINCIAN DAFTAR TRANSAKSI
+      // ==========================================
+      doc.addPage();
+
+      let pageNum = 2;
+      let rowY = 32;
+
+      // Table Header Function
+      const drawTableHeader = (posY: number) => {
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.rect(15, posY, 180, 8, "F");
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("No", 18, posY + 5);
+        doc.text("Tanggal", 27, posY + 5);
+        doc.text("Jenis", 52, posY + 5);
+        doc.text("Kategori", 77, posY + 5);
+        doc.text("Keterangan", 107, posY + 5);
+        doc.text("Jumlah", 162, posY + 5);
+      };
+
+      // Page Footer Function
+      const drawPageFooter = (currentPage: number) => {
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.setFont("helvetica", "normal");
+        doc.text("Laporan ini diproduksi secara otomatis oleh sistem pencatatan cerdas Keuanganku.", 15, 285);
+        doc.text(`Halaman ${currentPage}`, 186, 285);
+      };
+
+      // Draw Page 2 Header Bar
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, 210, 20, "F");
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("KEUANGANKU - RINCIAN DETAIL TRANSAKSI", 15, 13);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Periode: ${printedPeriod}`, 160, 13);
+
+      // Draw initial table header
+      drawTableHeader(rowY);
+      rowY += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+
+      monthlyTransactions.forEach((tx: any, idx: number) => {
+        // Paging handling: if row content exceeds 265mm limit
+        if (rowY > 265) {
+          drawPageFooter(pageNum);
+
+          doc.addPage();
+          pageNum += 1;
+          rowY = 32;
+
+          // Redraw Compact Header
+          doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.rect(0, 0, 210, 20, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.text("KEUANGANKU - RINCIAN DETAIL TRANSAKSI", 15, 13);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.text(`Periode: ${printedPeriod}`, 160, 13);
+
+          // Redraw Table Header
+          drawTableHeader(rowY);
+          rowY += 8;
+        }
+
+        // Row background striping
+        if (idx % 2 === 0) {
+          doc.setFillColor(245, 247, 250);
+          doc.rect(15, rowY, 180, 8, "F");
+        }
+
+        const descStr = (tx.description || "").substring(0, 30);
+        const catStr = (tx.category || "").substring(0, 15);
+        const amountStr = `Rp ${Number(tx.amount || 0).toLocaleString("id-ID")}`;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8.5);
+        doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+        doc.text(String(idx + 1), 18, rowY + 5.5);
+        doc.text(tx.date || "-", 27, rowY + 5.5);
+        
+        if (tx.type === "Income") {
+          doc.setTextColor(accentGreen[0], accentGreen[1], accentGreen[2]);
+          doc.text("Pemasukan", 52, rowY + 5.5);
+        } else {
+          doc.setTextColor(accentRed[0], accentRed[1], accentRed[2]);
+          doc.text("Pengeluaran", 52, rowY + 5.5);
+        }
+        
+        doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+        doc.text(catStr, 77, rowY + 5.5);
+        doc.text(descStr, 107, rowY + 5.5);
+        doc.text(amountStr, 162, rowY + 5.5);
+
+        rowY += 8;
+      });
+
+      // Draw footer for final page
+      drawPageFooter(pageNum);
+
+      const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
+      const pdfBase64 = pdfBuffer.toString("base64");
+
+      if (shouldEmail) {
+        const smtpHost = customSmtp.host || process.env.SMTP_HOST || "smtp.gmail.com";
+        const smtpPort = Number(customSmtp.port || process.env.SMTP_PORT || 587);
+        const smtpUser = customSmtp.user || process.env.SMTP_USER;
+        const smtpPass = customSmtp.pass || process.env.SMTP_PASS;
+
+        if (!smtpUser || !smtpPass) {
+          return res.status(400).json({ 
+            error: "Konfigurasi SMTP server belum lengkap. Silakan lengkapi Username SMTP & Kata Sandi di panel pengaturan jika memilih kirim via email." 
+          });
+        }
+
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+
+        const reportMonthName = format(now, "MMMM yyyy");
+        const mailOptions = {
+          from: `"Keuanganku Report" <${smtpUser}>`,
+          to: email,
+          subject: `📊 Laporan Finansial Bulanan Keuanganku - ${reportMonthName}`,
+          html: `
+            <div style="font-family: sans-serif; color: #334155; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+              <div style="background-color: #6a8d73; padding: 24px; text-align: center; color: white;">
+                <h2 style="margin: 0; font-size: 24px; letter-spacing: 0.05em;">KEUANGANKU</h2>
+                <p style="margin: 4px 0 0; font-size: 14px; opacity: 0.9;">Laporan Keuangan Otomatis Bulanan</p>
+              </div>
+              <div style="padding: 24px; line-height: 1.6;">
+                <p>Halo Teman Catat,</p>
+                <p>Disiplin keuanganmu sungguh luar biasa! Di sini, sistem pintar <strong>Keuanganku</strong> telah menyusun berkas lengkap laporan transaksi finansialmu untuk bulan <strong>${reportMonthName}</strong>.</p>
+                
+                <div style="background-color: #f8fafc; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #6a8d73;">
+                  <h4 style="margin: 0 0 8px; color: #1e293b;">Ringkasan Bulan Ini:</h4>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 4px 0; color: #64748b;">Total Pemasukan:</td>
+                      <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #16a34a;">Rp ${totalIncome.toLocaleString("id-ID")}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0; color: #64748b;">Total Pengeluaran:</td>
+                      <td style="padding: 4px 0; text-align: right; font-weight: bold; color: #dc2626;">Rp ${totalExpense.toLocaleString("id-ID")}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 8px 0 0; border-top: 1px solid #e2e8f0; font-weight: bold; color: #1e293b;">Sisa Saldo Bersih:</td>
+                      <td style="padding: 8px 0 0; border-top: 1px solid #e2e8f0; text-align: right; font-weight: bold; color: ${netSavings >= 0 ? '#16a34a' : '#dc2626'}; font-size: 15px;">
+                        Rp ${netSavings.toLocaleString("id-ID")}
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+
+                <p>Kami melampirkan salinan lengkap berkas PDF berisi seluruh catatan transaksi rinci untuk bulan ini yang dapat Anda arsipkan dengan aman.</p>
+                <p>Terus pantau arus kas Anda dan capai impian finansial cerdas bersama Keuanganku! 🦉💚</p>
+              </div>
+              <div style="background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 11px; color: #94a3b8;">
+                Email ini dikirim secara otomatis oleh aplikasi asisten Keuanganku. Mohon tidak membalas email ini secara langsung.
+              </div>
+            </div>
+          `,
+          attachments: [
+            {
+              filename: `Laporan_Keuanganku_${format(now, "yyyy-MM")}.pdf`,
+              content: pdfBuffer,
+            },
+          ],
+        };
+
+        console.log(`[Nodemailer] Sending financial report PDF to: ${email}...`);
+        await transporter.sendMail(mailOptions);
+        res.json({ 
+          success: true, 
+          message: "Laporan bulanan PDF berhasil terkirim melalui email.", 
+          pdfData: pdfBase64,
+          filename: `Laporan_Keuanganku_${format(now, "yyyy-MM")}.pdf`
+        });
+      } else {
+        res.json({ 
+          success: true, 
+          message: "Laporan bulanan PDF berhasil disusun secara instan.", 
+          pdfData: pdfBase64,
+          filename: `Laporan_Keuanganku_${format(now, "yyyy-MM")}.pdf`
+        });
+      }
+    } catch (e: any) {
+      console.error("[Nodemailer Error]", e);
+      res.status(500).json({ error: e.message || "Gagal memproses laporan PDF." });
     }
   });
 

@@ -5,7 +5,6 @@ import {
   fetchFinances, 
   addTransaction, 
   addCalendarReminder, 
-  sendWANotification, 
   getAISummary, 
   deleteTransaction, 
   resetTransactions, 
@@ -53,7 +52,6 @@ import {
   Pencil,
   FileText
 } from "lucide-react";
-import { getAppsScriptTemplate } from "../utils/appsScriptTemplate";
 import { generateFinancialReport } from "../utils/pdfGenerator";
 import { SettingsPanel } from "./SettingsPanel";
 import { FloatingAssistant } from "./FloatingAssistant";
@@ -156,30 +154,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
   // Notifications, WhatsApp destination, DoB
   const [reminderSummary, setReminderSummary] = useState("");
   const [reminderDate, setReminderDate] = useState("");
-  const [phone, setPhone] = useState("");
-  const [savedPhones, setSavedPhones] = useState<string[]>([""]);
-
-  useEffect(() => {
-    const currentUid = user?.uid || "guest";
-    if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
-    const key = `owi_saved_phones_${currentUid}`;
-    localStorage.setItem(key, JSON.stringify(savedPhones));
-  }, [savedPhones, user?.uid, loadedUid]);
-
-  const handleSavePhone = (numToSave: string) => {
-    const trimmed = numToSave.trim();
-    if (!trimmed) return;
-    if (!savedPhones.includes(trimmed)) {
-      setSavedPhones([...savedPhones, trimmed]);
-    }
-  };
-
-  const handleRemovePhone = (numToRemove: string) => {
-    setSavedPhones(savedPhones.filter(p => p !== numToRemove));
-  };
 
   const [dob, setDob] = useState("");
-  const [waNotify, setWaNotify] = useState(true);
 
   const amountInputRef = useRef<HTMLInputElement>(null);
   const descInputRef = useRef<HTMLInputElement>(null);
@@ -198,21 +174,6 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       }
     }
   };
-
-  // WhatsApp Chat bot state & rules
-  const [waBotEnabled, setWaBotEnabled] = useState(true);
-  const [waBotNotifyOnAdd, setWaBotNotifyOnAdd] = useState(true);
-  const [waBotNotifyOnBudget, setWaBotNotifyOnBudget] = useState(true);
-  const [chatInput, setChatInput] = useState("");
-  const [botIsTyping, setBotIsTyping] = useState(false);
-  const [chatMessages, setChatMessages] = useState<any[]>([
-    {
-      id: "welcome",
-      sender: "bot",
-      text: "Halo! Saya *Keuanganku* WhatsApp Bot 🤖\n\nSaya asisten robot otomatis yang siap memantau keuangan Anda. Saya akan mengirim laporan transaksi secara instan!\n\nKetik *!bantuan* untuk mendaftar perintah saya.",
-      timestamp: "09:00"
-    }
-  ]);
 
   // AI Insights and copied scripts states
   const [aiSummary, setAiSummary] = useState("");
@@ -302,21 +263,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     const currentUid = user?.uid || "guest";
     isPrefsLoadingRef.current = true;
     
-    // 1. Load saved phones
-    const phonesKey = `owi_saved_phones_${currentUid}`;
-    const savedPhonesVal = localStorage.getItem(phonesKey);
-    let loadedPhones: string[] = [""];
-    if (savedPhonesVal) {
-      try {
-        const parsed = JSON.parse(savedPhonesVal);
-        if (Array.isArray(parsed)) {
-          loadedPhones = parsed.includes("") ? parsed : ["", ...parsed];
-        }
-      } catch (e) {}
-    }
-    setSavedPhones(loadedPhones);
-
-    // 2. Load Assistant configurations
+    // 1. Load Assistant configurations
     const assistantEnabledKey = `owi_assistant_enabled_${currentUid}`;
     const assistantEnabledSaved = localStorage.getItem(assistantEnabledKey);
     setIsAssistantEnabled(assistantEnabledSaved !== "false");
@@ -325,22 +272,17 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     const assistantSizeSaved = localStorage.getItem(assistantSizeKey);
     setAssistantSize(assistantSizeSaved ? Number(assistantSizeSaved) : 1);
 
-    // 3. Load Show Balance
+    // 2. Load Show Balance
     const showBalanceKey = `owi_show_balance_${currentUid}`;
     const showBalanceSaved = localStorage.getItem(showBalanceKey);
     setShowBalance(showBalanceSaved !== "false");
 
-    // 4. Load Profile preferences
+    // 3. Load Profile preferences
     const profileKey = isGuest ? `guestProfile_${currentUid}` : `userProfile_${currentUid}`;
     const profileSaved = localStorage.getItem(profileKey);
     if (profileSaved) {
       try {
         const p = JSON.parse(profileSaved);
-        if (p.phone) {
-          setPhone(p.phone);
-        } else {
-          setPhone("");
-        }
         if (p.dob) {
           setDob(p.dob);
         } else {
@@ -379,7 +321,6 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
       } catch (e) {}
     } else {
       // Clear profile inputs back to initial values for this user
-      setPhone("");
       setDob("");
       setThemeMode("emerald");
       setColorMode("light");
@@ -398,8 +339,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     const currentUid = user?.uid || "guest";
     if (isPrefsLoadingRef.current || loadedUid !== currentUid || stateUserRef.current !== currentUid) return;
     const profileKey = isGuest ? `guestProfile_${currentUid}` : `userProfile_${currentUid}`;
-    localStorage.setItem(profileKey, JSON.stringify({ phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget }));
-  }, [phone, dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget, isGuest, user?.uid, loadedUid]);
+    localStorage.setItem(profileKey, JSON.stringify({ dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget }));
+  }, [dob, themeMode, colorMode, designStyle, customName, customPhoto, monthlyBudget, isGuest, user?.uid, loadedUid]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -690,139 +631,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     }
   }, []);
 
-  // WhatsApp bot script copying helper
-  const handleCopyAppsScript = () => {
-    const code = getAppsScriptTemplate(spreadsheetId);
-    navigator.clipboard.writeText(code);
-    setCopiedScript(true);
-    showToast("Kode Google Apps Script berhasil disalin!", "success");
-    setTimeout(() => setCopiedScript(false), 3000);
-  };
 
-  const handleSendChatMessage = async (msgText: string) => {
-    if (!msgText.trim()) return;
-
-    const userMsgText = msgText;
-    const timeNow = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-    
-    const userMsgObj = {
-      id: Date.now().toString(),
-      sender: "user" as const,
-      text: userMsgText,
-      timestamp: timeNow
-    };
-
-    setChatMessages(prev => [...prev, userMsgObj]);
-    setChatInput("");
-    setBotIsTyping(true);
-
-    setTimeout(async () => {
-      let responseText = "";
-      const lowerInput = userMsgText.trim().toLowerCase();
-
-      if (lowerInput === "!bantuan" || lowerInput === "bantuan" || lowerInput === "help" || lowerInput === "/help") {
-        responseText = `🤖 *Asisten WhatsApp Keuanganku* - Daftar Perintah:\n\n` +
-          `• *!saldo* - Cek ringkasan saldo, pemasukan, & pengeluaran aktual.\n` +
-          `• *!summary* - Rekomendasi/analisis finansial dari kembaran otak AI Anda.\n` +
-          `• *!tambah [income/expense] [jumlah] [kategori] [deskripsi]* - Tambah transaksi instan via chat.\n` +
-          `  _Contoh: !tambah expense 15000 Makan Es Jeruk_\n` +
-          `• *!reset* - Reset seluruh transaksi.`;
-      } else if (lowerInput === "!saldo" || lowerInput === "saldo") {
-        responseText = `🔵 *Rangkuman Saldo Anda* 🤖\n\n` +
-          `• *Total Saldo*: Rp ${(totalIncome - totalExpense).toLocaleString("id-ID")}\n` +
-          `• *Pemasukan 🟢*: Rp ${totalIncome.toLocaleString("id-ID")}\n` +
-          `• *Pengeluaran 🔴*: Rp ${totalExpense.toLocaleString("id-ID")}\n` +
-          `• *Limit Anggaran*: Rp ${monthlyBudget.toLocaleString("id-ID")}\n` +
-          `• *Sisa Batas Anggaran*: Rp ${(monthlyBudget - totalExpense).toLocaleString("id-ID")}\n\n` +
-          `_Cerdas mengelola uang bersama Keuanganku!_`;
-      } else if (lowerInput === "!summary" || lowerInput === "summary") {
-        responseText = `🤖 *Rekomendasi Asisten AI Keuanganku*:\n\n` +
-          `${aiSummary || "Analisis AI Anda belum di-generate atau kosong. Silakan masuk ke panel 'Asisten AI' lalu klik 'Analisis Sekarang' untuk men-sinkronisasi otak AI!"}`;
-      } else if (lowerInput.startsWith("!tambah")) {
-        const parts = userMsgText.split(/\s+/);
-        if (parts.length < 5) {
-          responseText = `❌ *Gagal menambah transaksi*.\n\n_Format salah! Harap gunakan format:_\n*!tambah [income/expense] [jumlah] [kategori] [deskripsi]*\n\n_Contoh:_ *!tambah expense 25000 Makanan Makan Siang Bakso*`;
-        } else {
-          const rawType = parts[1].toLowerCase();
-          const txType: "Income" | "Expense" = rawType === "income" || rawType === "pemasukan" ? "Income" : "Expense";
-          const txAmount = Number(parts[2]);
-          const txCategory = parts[3];
-          const txDesc = parts.slice(4).join(" ");
-
-          if (isNaN(txAmount) || txAmount <= 0) {
-            responseText = `❌ *Gagal mencatat*: Jumlah transaksi harus berupa angka positif yang valid!`;
-          } else {
-            try {
-              if (isGuest) {
-                const newTx = {
-                  id: Date.now().toString(),
-                  amount: txAmount,
-                  type: txType,
-                  category: txCategory,
-                  description: txDesc,
-                  date: new Date().toISOString().split('T')[0]
-                };
-                const stored = localStorage.getItem(guestTransactionsKey);
-                const txs = stored ? JSON.parse(stored) : [];
-                const updated = [newTx, ...txs];
-                localStorage.setItem(guestTransactionsKey, JSON.stringify(updated));
-                setTransactions(updated);
-              } else {
-                await addTransaction({
-                  spreadsheetId: spreadsheetId || "",
-                  amount: txAmount,
-                  type: txType,
-                  category: txCategory,
-                  description: txDesc,
-                  date: new Date().toISOString().split('T')[0]
-                });
-                await loadData();
-              }
-              responseText = `✅ *Pencatatan Otomatis Sukses* 🤖\n\n` +
-                `Berhasil mencatat *${txType === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}* baru:\n` +
-                `• *Jumlah*: Rp ${txAmount.toLocaleString("id-ID")}\n` +
-                `• *Kategori*: ${txCategory}\n` +
-                `• *Keterangan*: ${txDesc}\n\n` +
-                `_Data Anda telah langsung tersinkronisasi dengan Database spreadsheet!_`;
-            } catch (err: any) {
-              responseText = `❌ *Pencatatan Gagal*: ${err.message}`;
-            }
-          }
-        }
-      } else if (lowerInput === "!reset" || lowerInput === "reset") {
-        try {
-          if (isGuest) {
-            localStorage.removeItem(guestTransactionsKey);
-            setTransactions([]);
-          } else {
-            await resetTransactions(spreadsheetId || "");
-            await loadData();
-          }
-          responseText = `🗑️ *Reset Keuangan Sukses* 🤖\n\nSeluruh riwayat transaksi Anda telah berhasil dikosongkan secara berkala sesuai instruksi chat Anda.`;
-        } catch (e: any) {
-          responseText = `❌ *Gagal me-reset*: ${e.message}`;
-        }
-      } else {
-        responseText = `Halo! Perintah *"${userMsgText}"* tidak dikenali.\n\nSilakan ketik *!bantuan* untuk mendaftar fungsi otomatis asisten Bot Keuanganku. 🤖`;
-      }
-
-      setChatMessages(prev => [...prev, {
-        id: Date.now().toString() + "_reply",
-        sender: "bot",
-        text: responseText,
-        timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })
-      }]);
-      setBotIsTyping(false);
-
-      if (waBotEnabled && phone) {
-        try {
-          await sendWANotification(phone, responseText);
-        } catch (waErr) {
-          console.error("Fonnte Real WhatsApp push error:", waErr);
-        }
-      }
-    }, 1000);
-  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -862,58 +671,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
         setTransactions(updatedList);
       }
 
-      if (waBotEnabled && waBotNotifyOnAdd) {
-        const timeStr = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-        const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
-        const textMsg = `🔔 *NOTIFIKASI TRANSAKSI BARU* 🤖\n\n` +
-          `• *Keterangan*: ${desc || "Tanpa Keterangan"}\n` +
-          `• *Tanggal*: ${dateFormatted}\n` +
-          `• *Jenis*: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\n` +
-          `• *Kategori*: ${category}\n` +
-          `• *Nominal*: Rp ${inputAmount.toLocaleString("id-ID")}`;
-        
-        setChatMessages(prev => [...prev, {
-          id: Date.now().toString() + "_addNotify",
-          sender: "bot",
-          text: textMsg,
-          timestamp: timeStr
-        }]);
 
-        if (waBotNotifyOnBudget && monthlyBudget > 0 && isExpense) {
-          const currentExpenses = updatedList.filter(t => t.type === "Expense").reduce((sum, t) => sum + t.amount, 0);
-          if (currentExpenses > monthlyBudget) {
-            const textBudget = `⚠️ *PERINGATAN ANGGARAN BULANAN* 🤖\n\n` +
-              `Total Pengeluaran Anda saat ini (*Rp ${currentExpenses.toLocaleString("id-ID")}*) telah MELEBIHI batas anggaran bulanan sebesar *Rp ${monthlyBudget.toLocaleString("id-ID")}*!\n\n_Harap hemat anggaran belanja Anda demi kestabilan tabungan._`;
-            setChatMessages(prev => [...prev, {
-              id: Date.now().toString() + "_budgetNotify",
-              sender: "bot",
-              text: textBudget,
-              timestamp: timeStr
-            }]);
-
-            if (phone) {
-              try {
-                await sendWANotification(phone, textBudget);
-              } catch (waBudgetErr: any) {
-                console.warn("WhatsApp notification budget limit failed: ", waBudgetErr.message || waBudgetErr);
-                showToast(`Gagal mengirim pesan WhatsApp via Fonnte (Budget): ${waBudgetErr.message || "Pastikan nomor WhatsApp benar"}`, "error");
-              }
-            }
-          }
-        }
-      }
-
-      if (waNotify && phone) {
-         try {
-           const timeString = format(new Date(), "HH:mm");
-           const dateFormatted = format(parseISO(date), "dd MMMM yyyy", { locale: id });
-           const msg = `*Keuanganku - Info Transaksi*\n\nTanggal: ${dateFormatted}\nJam: ${timeString}\nJenis: ${type === "Income" ? "Pemasukan 🟢" : "Pengeluaran 🔴"}\nKategori: ${category}\nNominal: Rp ${inputAmount.toLocaleString("id-ID")}\nKeterangan: ${desc}`;
-           await sendWANotification(phone, msg);
-         } catch (waErr: any) {
-           console.warn("WhatsApp notification failed: ", waErr.message || waErr);
-           showToast(`Gagal mengirim WhatsApp via Fonnte: ${waErr.message || "Pastikan nomor WhatsApp benar"}`, "error");
-         }
-      }
 
       showToast("Transaksi berhasil ditambahkan!", "success");
       await loadData();
@@ -1213,11 +971,6 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             setCustomName={setCustomName}
             customPhoto={customPhoto}
             setCustomPhoto={setCustomPhoto}
-            phone={phone}
-            setPhone={setPhone}
-            savedPhones={savedPhones}
-            handleSavePhone={handleSavePhone}
-            handleRemovePhone={handleRemovePhone}
             dob={dob}
             setDob={setDob}
             themeMode={themeMode}
@@ -1233,18 +986,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             loadSpreadsheetsList={loadSpreadsheetsList}
             customSpreadsheetId={customSpreadsheetId}
             handleCustomSpreadsheetChange={handleCustomSpreadsheetChange}
-            waBotEnabled={waBotEnabled}
-            setWaBotEnabled={setWaBotEnabled}
-            waBotNotifyOnAdd={waBotNotifyOnAdd}
-            setWaBotNotifyOnAdd={setWaBotNotifyOnAdd}
-            waBotNotifyOnBudget={waBotNotifyOnBudget}
-            setWaBotNotifyOnBudget={setWaBotNotifyOnBudget}
             isAssistantEnabled={isAssistantEnabled}
             setIsAssistantEnabled={setIsAssistantEnabled}
             assistantSize={assistantSize}
             setAssistantSize={setAssistantSize}
-            handleCopyAppsScript={handleCopyAppsScript}
-            copiedScript={copiedScript}
             handleResetTransactions={handleResetTransactions}
             isResetting={isResetting}
             handleSaveProfile={handleSaveProfile}
@@ -1254,6 +999,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
             ui={ui}
             theme={theme}
             onBack={() => setActivePage("dashboard")}
+            transactions={transactions}
           />
         ) : activePage === "budget_detail" ? (
           <BudgetDetails
@@ -1766,88 +1512,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                         )}
                       </div>
                       
-                      {/* WhatsApp trigger toggle info */}
-                      <div className="sm:col-span-2 flex items-center gap-2 mt-1">
-                        <input 
-                          type="checkbox" 
-                          id="wa-notify"
-                          checked={waNotify}
-                          onChange={e => setWaNotify(e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-350 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                        />
-                        <label htmlFor="wa-notify" className={`text-xs font-bold ${ui.textMuted} cursor-pointer select-none`}>
-                          Kirim notifikasi ringkasan langsung ke nomor WhatsApp
-                        </label>
-                      </div>
 
-                      {waNotify && (
-                        <div className="sm:col-span-2 space-y-2">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <label className={`block text-[10px] font-bold ${ui.textMuted} uppercase`}>nomor WhatsApp Tujuan</label>
-                            
-                            <div className="flex gap-1.5">
-                              {phone.trim() && !savedPhones.includes(phone.trim()) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSavePhone(phone)}
-                                  className="text-[10px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
-                                >
-                                  Simpan Nomor
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => { setPhone(""); }}
-                                className="text-[10px] bg-slate-500/10 hover:bg-slate-500/20 text-slate-600 dark:text-slate-400 font-bold px-2 py-0.5 rounded transition-colors cursor-pointer"
-                              >
-                                Tambah Nomor Baru
-                              </button>
-                            </div>
-                          </div>
-                          
-                          <input 
-                            type="tel" 
-                            value={phone}
-                            onChange={e => setPhone(e.target.value)}
-                            placeholder="Masukan nomor WhatsApp Anda"
-                            className={`w-full ${ui.inputBg} border ${ui.inputRadius} px-3.5 py-2 text-xs font-bold focus:ring-2 ${theme.focus} outline-none`}
-                            required={waNotify}
-                          />
-
-                          {savedPhones.length > 0 && (
-                            <div className="pt-1">
-                              <span className={`text-[9px] font-bold ${ui.textMuted} uppercase block mb-1`}>Nomor Tersimpan (klik untuk memilih):</span>
-                              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                                {savedPhones.map((num) => (
-                                  <div 
-                                    key={num} 
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold transition-all border select-none ${
-                                      phone === num 
-                                        ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold" 
-                                        : `${ui.panelBg} hover:border-slate-350 dark:hover:border-slate-750 text-slate-600 dark:text-slate-400`
-                                    }`}
-                                  >
-                                    <span 
-                                      className="cursor-pointer font-bold text-[11px]" 
-                                      onClick={() => setPhone(num)}
-                                    >
-                                      {num}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemovePhone(num)}
-                                      className="text-slate-400 hover:text-red-500 transition-colors ml-0.5 p-0.5"
-                                      title="Hapus"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                     <div className="flex justify-end pt-3">
                       <button 
