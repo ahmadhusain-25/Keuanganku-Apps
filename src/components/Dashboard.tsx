@@ -50,7 +50,10 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  FileText
+  FileText,
+  Home,
+  LayoutDashboard,
+  ChevronLeft
 } from "lucide-react";
 import { generateFinancialReport } from "../utils/pdfGenerator";
 import { SettingsPanel } from "./SettingsPanel";
@@ -139,6 +142,10 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
     if (desc === "Parkir Motor" || desc === "Parkir Mobil") {
       setDesc("");
     }
+    
+    // Automatically switch to features tab (Pencatatan Keuangan)
+    setActiveMenuTab("features");
+
     setTimeout(() => {
       if (adderFormRef.current) {
         adderFormRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -148,7 +155,7 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
           amountInput.focus();
         }
       }
-    }, 150);
+    }, 250);
   };
 
   // Notifications, WhatsApp destination, DoB
@@ -223,6 +230,20 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
 
   // Router pagination state
   const [activePage, setActivePage] = useState<"dashboard" | "profile" | "budget_detail">("dashboard");
+
+  // Multi-menu state inside primary dashboard
+  const [activeMenuTab, setActiveMenuTab] = useState<"homepage" | "features">("homepage");
+
+  // Slide state for spending chart (trend line vs distribution pie)
+  const [activeChartSlide, setActiveChartSlide] = useState<"trend" | "distribution">("trend");
+
+  // Auto slide shifting every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveChartSlide((prev) => (prev === "trend" ? "distribution" : "trend"));
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Date Range Filter States
   const [filterPreset, setFilterPreset] = useState<"all" | "today" | "7days" | "30days" | "thisMonth" | "custom">("all");
@@ -1054,8 +1075,39 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
               </div>
             )}
 
+            {/* Menu Tab Navigation Switcher */}
+            <div className="flex justify-center w-full mb-6 relative z-20">
+              <div className={`p-1 rounded-2xl flex items-center gap-1.5 ${isLight ? 'bg-slate-100' : 'bg-[#0f1713]/80 border border-white/5'} w-full max-w-sm shadow-sm`}>
+                <button
+                  type="button"
+                  onClick={() => setActiveMenuTab("homepage")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer select-none ${
+                    activeMenuTab === "homepage"
+                      ? `${theme.bgIcon} text-white shadow-md scale-[1.01]`
+                      : `${isLight ? 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-450 hover:text-white hover:bg-white/5'}`
+                  }`}
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Beranda</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveMenuTab("features")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer select-none ${
+                    activeMenuTab === "features"
+                      ? `${theme.bgIcon} text-white shadow-md scale-[1.01]`
+                      : `${isLight ? 'text-slate-605 hover:text-slate-900 hover:bg-slate-200/50' : 'text-slate-450 hover:text-white hover:bg-white/5'}`
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Pencatatan & Fitur</span>
+                </button>
+              </div>
+            </div>
+
             {/* Balances & Budgets Row */}
-            <div className="space-y-4">
+            {activeMenuTab === "homepage" && (
+              <div className="space-y-4 animation-fadeIn">
               <section className={`grid grid-cols-2 ${monthlyBudget > 0 ? 'md:grid-cols-2 lg:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
                 <div className={`bg-gradient-to-br ${theme.card} text-white p-5 ${ui.panelRadius} shadow-xl relative overflow-hidden transition-all duration-500 col-span-2 md:col-span-1`}>
                   <div className={`absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl`}></div>
@@ -1208,98 +1260,241 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                   </div>
                 </div>
               </section>
+            </div>
+            )}
 
-              {/* Daily Spending Trends LineChart */}
-              <section className={`${ui.panelBg} border p-5 md:p-6 ${ui.panelRadius} transition-all duration-500 space-y-4 shadow-xl shadow-emerald-950/5`}>
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div>
+            {/* Dynamic Unified Slide-Toggleable Charts Panel */}
+            {activeMenuTab === "homepage" && (
+              <section className={`${ui.panelBg} border p-5 md:p-6 ${ui.panelRadius} transition-all duration-500 space-y-4 shadow-xl shadow-emerald-950/5 relative overflow-hidden animate-fadeIn`}>
+                <div className="flex items-center justify-between border-b pb-3 border-slate-500/5">
+                  <div className="text-left">
                     <h3 className={`text-sm font-bold ${ui.textMain} flex items-center gap-2`}>
-                      <svg className={`w-4 h-4 ${theme.icon}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.541" />
-                      </svg>
-                      Tren Pengeluaran Harian Bulan Ini
+                      {activeChartSlide === "trend" ? (
+                        <>
+                          <svg className={`w-4 h-4 ${theme.icon}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.541" />
+                          </svg>
+                          <span>Tren Pengeluaran Harian</span>
+                        </>
+                      ) : (
+                        <>
+                          <PieChartIcon className={`w-4 h-4 ${theme.icon}`} />
+                          <span>Distribusi Pengeluaran</span>
+                        </>
+                      )}
                     </h3>
                     <p className={`text-[11px] ${ui.textMuted} mt-0.5`}>
-                      Visualisasi grafik pengeluaran anggaran harian Anda sepanjang bulan {format(new Date(), "MMMM yyyy", { locale: id })}
+                      {activeChartSlide === "trend" 
+                        ? `Visualisasi grafik pengeluaran anggaran harian Anda sepanjang bulan ${format(new Date(), "MMMM yyyy", { locale: id })}`
+                        : "Persentase diagram kontribusi pengeluaran berdasarkan kategori pengeluaran Anda"
+                      }
                     </p>
                   </div>
-                  
-                  {peakSpending.amount > 0 && (
-                    <div className={`px-4.5 py-2 rounded-2xl flex items-center gap-2.5 ${isLight ? 'bg-amber-500/10 text-amber-700' : 'bg-amber-500/5 text-amber-500'} border border-amber-500/15 text-xs font-bold shrink-0 animate-fadeIn`}>
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                      </span>
-                      <span>
-                        Hari Terboros: <span className="font-extrabold text-amber-600 dark:text-amber-400">Rp {peakSpending.amount.toLocaleString("id-ID")}</span> (tgl {peakSpending.day})
-                      </span>
-                    </div>
-                  )}
+
+                  {/* Slider Controls */}
+                  <div className="flex items-center gap-1.5 shrink-0 select-none">
+                    <button 
+                      type="button"
+                      onClick={() => setActiveChartSlide("trend")}
+                      className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${activeChartSlide === "trend" ? 'bg-[#6a8d73] w-5' : 'bg-slate-300 dark:bg-slate-800'}`} 
+                      title="Slide Tren Harian"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setActiveChartSlide("distribution")}
+                      className={`w-2.5 h-2.5 rounded-full transition-all cursor-pointer ${activeChartSlide === "distribution" ? 'bg-[#6a8d73] w-5' : 'bg-slate-300 dark:bg-slate-800'}`} 
+                      title="Slide Distribusi"
+                    />
+                  </div>
                 </div>
 
-                <div className="h-60 w-full pt-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={dailySpendingData}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={ui.chartTheme.border} opacity={0.5} />
-                      <XAxis 
-                        dataKey="day" 
-                        tickLine={false}
-                        axisLine={false}
-                        stroke={isLight ? "#94a3b8" : "#475569"}
-                        style={{ fontSize: '10px', fontWeight: 'bold' }}
-                        dy={8}
-                      />
-                      <YAxis 
-                        tickLine={false}
-                        axisLine={false}
-                        stroke={isLight ? "#94a3b8" : "#475569"}
-                        style={{ fontSize: '10px', fontWeight: 'bold' }}
-                        tickFormatter={(value) => value >= 1000000 ? `${(value/1000000).toFixed(1)}jt` : value >= 1000 ? `${(value/1000).toFixed(0)}rb` : value}
-                        dx={-4}
-                      />
-                      <RechartsTooltip
-                        formatter={(value: number) => [`Rp ${value.toLocaleString("id-ID")}`, "Total Pengeluaran"]}
-                        labelFormatter={(label) => `Tanggal ${label} ${format(new Date(), "MMMM", { locale: id })}`}
-                        contentStyle={{
-                          backgroundColor: ui.chartTheme.bg,
-                          borderColor: ui.chartTheme.border,
-                          color: ui.chartTheme.text,
-                          borderRadius: '1.25rem',
-                          fontSize: '11px',
-                          fontWeight: 'bold',
-                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                <div className="relative">
+                  <AnimatePresence mode="wait">
+                    {activeChartSlide === "trend" ? (
+                      <motion.div
+                        key="slide-trend"
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(event, info) => {
+                          const swipeThreshold = 50;
+                          if (info.offset.x < -swipeThreshold) {
+                            setActiveChartSlide("distribution");
+                          }
                         }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="Pengeluaran"
-                        stroke={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"}
-                        strokeWidth={2.5}
-                        dot={{ r: 1.5, strokeWidth: 1, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
-                        activeDot={{ r: 5, strokeWidth: 0, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-4 cursor-grab active:cursor-grabbing touch-pan-y select-none"
+                      >
+                        {peakSpending.amount > 0 && (
+                          <div className={`px-4.5 py-2 rounded-2xl flex items-center justify-between gap-2.5 ${isLight ? 'bg-amber-500/10 text-amber-700' : 'bg-amber-500/5 text-amber-500'} border border-amber-500/15 text-xs font-bold shrink-0 text-left`}>
+                            <div className="flex items-center gap-2">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                              </span>
+                              <span>
+                                Hari Terboros: <span className="font-extrabold text-amber-600 dark:text-amber-400">Rp {peakSpending.amount.toLocaleString("id-ID")}</span> (tgl {peakSpending.day})
+                              </span>
+                            </div>
+                            <span className={`text-[9.5px] font-bold uppercase tracking-wider ${ui.textMuted}`}>Slide 1 dari 2</span>
+                          </div>
+                        )}
+
+                        <div className="h-60 w-full pt-1">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={dailySpendingData}
+                              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                            >
+                              <defs>
+                                <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0.25}/>
+                                  <stop offset="95%" stopColor={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"} stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={ui.chartTheme.border} opacity={0.5} />
+                              <XAxis 
+                                dataKey="day" 
+                                tickLine={false}
+                                axisLine={false}
+                                stroke={isLight ? "#94a3b8" : "#475569"}
+                                style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                dy={8}
+                              />
+                              <YAxis 
+                                tickLine={false}
+                                axisLine={false}
+                                stroke={isLight ? "#94a3b8" : "#475569"}
+                                style={{ fontSize: '10px', fontWeight: 'bold' }}
+                                tickFormatter={(value) => value >= 1000000 ? `${(value/1000000).toFixed(1)}jt` : value >= 1000 ? `${(value/1000).toFixed(0)}rb` : value}
+                                dx={-4}
+                              />
+                              <RechartsTooltip
+                                formatter={(value: number) => [`Rp ${value.toLocaleString("id-ID")}`, "Total Pengeluaran"]}
+                                labelFormatter={(label) => `Tanggal ${label} ${format(new Date(), "MMMM", { locale: id })}`}
+                                contentStyle={{
+                                  backgroundColor: ui.chartTheme.bg,
+                                  borderColor: ui.chartTheme.border,
+                                  color: ui.chartTheme.text,
+                                  borderRadius: '1.25rem',
+                                  fontSize: '11px',
+                                  fontWeight: 'bold',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                                }}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="Pengeluaran"
+                                stroke={themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899"}
+                                strokeWidth={2.5}
+                                dot={{ r: 1.5, strokeWidth: 1, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
+                                activeDot={{ r: 5, strokeWidth: 0, fill: themeMode === "emerald" ? "#10b981" : themeMode === "blue" ? "#3b82f6" : themeMode === "purple" ? "#a78bfa" : themeMode === "rose" ? "#f43f5e" : "#ec4899" }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="slide-distribution"
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={0.2}
+                        onDragEnd={(event, info) => {
+                          const swipeThreshold = 50;
+                          if (info.offset.x > swipeThreshold) {
+                            setActiveChartSlide("trend");
+                          }
+                        }}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-4 cursor-grab active:cursor-grabbing touch-pan-y select-none"
+                      >
+                        <div className="flex justify-between items-center bg-emerald-500/[0.02] border border-emerald-500/10 p-2.5 px-4 rounded-xl text-xs font-bold leading-none select-none text-left">
+                          <span className={`${ui.textMain}`}>Kategori Pengeluaran Bulan Ini</span>
+                          <span className={`text-[9.5px] font-bold uppercase tracking-wider ${ui.textMuted}`}>Slide 2 dari 2</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                          {chartData.length > 0 ? (
+                            <>
+                              <div className="h-48 w-full flex items-center justify-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie
+                                      data={chartData}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={55}
+                                      outerRadius={75}
+                                      paddingAngle={5}
+                                      dataKey="value"
+                                      stroke="none"
+                                    >
+                                      {chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                      ))}
+                                    </Pie>
+                                    <RechartsTooltip 
+                                      content={({ active, payload }) => {
+                                        if (active && payload && payload.length) {
+                                          return (
+                                            <div className="p-3 rounded-xl border shadow-xl flex flex-col gap-1 z-50 text-[11px] text-left" style={{ backgroundColor: ui.chartTheme.bg, borderColor: ui.chartTheme.border, color: ui.chartTheme.text }}>
+                                              <p className="text-[10px] uppercase tracking-wider font-extrabold opacity-70">{payload[0].name}</p>
+                                              <p className="text-sm font-bold text-emerald-500">{`Rp ${Number(payload[0].value).toLocaleString("id-ID")}`}</p>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      }}
+                                    />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+                              
+                              {/* Category Legend list with colors and percentages */}
+                              <div className="grid grid-cols-2 gap-2 text-[10px] font-bold max-h-48 overflow-y-auto scrollbar-thin py-2 text-left">
+                                {chartData.map((item, idx) => {
+                                  const percent = (item.value / totalExpense) * 100;
+                                  return (
+                                    <div key={idx} className="flex items-center gap-1.5 truncate p-1.5 rounded-lg hover:bg-slate-500/5 transition-colors">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                                      <div className="flex flex-col text-left truncate">
+                                        <span className={`${ui.textMain} truncate`}>{item.name}</span>
+                                        <span className="text-slate-400 font-mono text-[9px] font-normal">{percent.toFixed(1)}% ({`Rp ${item.value.toLocaleString("id-ID")}`})</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="col-span-2 h-44 flex flex-col items-center justify-center text-[10px] text-slate-450 font-mono border border-dashed border-slate-500/10 rounded-2xl w-full">
+                              <span>Diagram kategori pengeluaran kosong</span>
+                              <span className="text-[9px] mt-1 text-slate-500">Silakan input pengeluaran pada menu Pencatatan untuk melihat diagram</span>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </section>
-            </div>
+            )}
 
             {/* Split dashboard column layouts */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left major side: transaction list and adder form */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className={`${activeMenuTab === "homepage" ? "lg:col-span-3" : "lg:col-span-2"} space-y-6`}>
                 
                 {/* Form Adder Component */}
-                <div ref={adderFormRef} className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 scroll-mt-20`}>
+                {activeMenuTab === "features" && (
+                  <div ref={adderFormRef} className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 scroll-mt-20 shadow-sm animate-fadeIn`}>
                   <h3 className={`text-base font-bold ${ui.textMain} mb-4 flex items-center gap-2`}>
                     <PlusCircle className={`w-5 h-5 ${theme.icon}`} /> Tambah Transaksi Keuangan
                   </h3>
@@ -1530,9 +1725,11 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     </div>
                   </form>
                 </div>
+                )}
 
                 {/* Latest Records lists */}
-                <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 flex flex-col`}>
+                {activeMenuTab === "homepage" && (
+                  <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 sm:p-6 transition-all duration-500 flex flex-col animate-fadeIn`}>
                   <div className="flex justify-between items-center mb-4 border-b pb-2.5">
                     <h3 className={`text-xs font-bold ${ui.textMain} uppercase tracking-wider flex items-center gap-2`}>
                       Riwayat Transaksi Terakhir
@@ -1768,74 +1965,13 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     )}
                   </div>
                 </div>
+                )}
 
               </div>
 
               {/* Right minor side: charts, AI Summary, WhatsApp simulation */}
-              <div className="space-y-6">
-                
-                {/* Visual Circle Recharts pie */}
-                <div className={`${ui.panelBg} border ${ui.panelRadius} p-5 flex flex-col transition-all duration-500 shadow-sm`}>
-                  <h3 className={`text-xs font-bold ${ui.textMain} mb-5 uppercase tracking-wider flex items-center gap-2`}>
-                    <PieChartIcon className={`w-4 h-4 ${theme.icon}`} /> Distribusi Pengeluaran
-                  </h3>
-                  {chartData.length > 0 ? (
-                    <div className="space-y-4">
-                      <div className="h-44 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={chartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={50}
-                              outerRadius={70}
-                              paddingAngle={4}
-                              dataKey="value"
-                              stroke="none"
-                            >
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip 
-                              content={({ active, payload }) => {
-                                if (active && payload && payload.length) {
-                                  return (
-                                    <div className={`p-3 rounded-xl border shadow-xl flex flex-col gap-1 z-50`} style={{ backgroundColor: ui.chartTheme.bg, borderColor: ui.chartTheme.border, color: ui.chartTheme.text }}>
-                                      <p className="text-[10px] uppercase tracking-wider font-bold opacity-70">{payload[0].name}</p>
-                                      <p className="text-sm font-bold text-emerald-500">{`Rp ${Number(payload[0].value).toLocaleString("id-ID")}`}</p>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      
-                      {/* Percent categories indexes */}
-                      <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
-                        {chartData.map((item, idx) => {
-                          const percent = (item.value / totalExpense) * 100;
-                          return (
-                            <div key={idx} className="flex items-center gap-1.5 truncate">
-                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                              <span className={ui.textMain}>{item.name}:</span>
-                              <span className="text-slate-400 font-mono">{percent.toFixed(0)}%</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-44 flex flex-col items-center justify-center text-[10px] text-slate-450 font-mono border border-dashed border-slate-500/10 rounded-2xl">
-                      <span>No expense chart data</span>
-                      <span className="text-[9px] mt-1 text-slate-500">Input pengeluaran untuk melihat</span>
-                    </div>
-                  )}
-                </div>
+              {activeMenuTab === "features" && (
+                <div className="space-y-6 animate-fadeIn">
 
                 {/* Gemini intelligent summarizing assistance */}
                 <div className={`${isLight ? 'bg-gradient-to-br from-slate-100 to-slate-200/50 border-slate-350' : 'bg-gradient-to-br from-[#0e1812] to-[#122319] border-white/5'} border ${ui.panelRadius} p-5 shadow-sm transition-colors relative overflow-hidden`}>
@@ -1902,8 +2038,8 @@ export const Dashboard = ({ user, onLogout }: { user?: any; onLogout: () => void
                     </button>
                   </form>
                 </div>
-
               </div>
+              )}
             </section>
           </>
         )}
