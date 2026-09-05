@@ -17,6 +17,9 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
+provider.setCustomParameters({
+  prompt: "select_account"
+});
 // Request Workspace scopes
 provider.addScope("https://www.googleapis.com/auth/drive.file");
 provider.addScope("https://www.googleapis.com/auth/spreadsheets");
@@ -127,14 +130,29 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   } catch (error: any) {
     console.error("Sign in error:", error);
     
-    // Fallback to Redirect automatically if popup is blocked
+    // User voluntarily closed the popup
+    if (error?.code === "auth/popup-closed-by-user") {
+      const err = new Error("Jendela login ditutup sebelum otorisasi selesai. Silakan coba klik tombol Google Sign In lagi.");
+      (err as any).code = "auth/popup-closed-by-user";
+      throw err;
+    }
+
+    // Popup was truly blocked by browser
     if (
       error?.code === "auth/popup-blocked" || 
-      error?.message?.indexOf("popup") !== -1 ||
-      error?.message?.indexOf("blocked") !== -1
+      error?.code === "auth/cancelled-popup-request" ||
+      (typeof error?.message === "string" && error.message.toLowerCase().includes("popup blocked"))
     ) {
-      console.log("Popup blocked by browser. Cannot use redirect in iframe reliably.");
-      throw new Error("POPUP_BLOCKED");
+      console.log("Popup blocked by browser.");
+      const err = new Error("POPUP_BLOCKED");
+      (err as any).code = "auth/popup-blocked";
+      throw err;
+    }
+
+    if (error?.code === "auth/internal-error") {
+      const err = new Error("Terjadi kendala koneksi saat otentikasi. Silakan coba kembali atau gunakan opsi 'Masuk via Redirect'.");
+      (err as any).code = "auth/internal-error";
+      throw err;
     }
     throw error;
   } finally {

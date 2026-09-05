@@ -1,9 +1,11 @@
 {
-  "projectId": "golden-smile-m5xj8",
-  "appId": "1:869933746874:web:2916f53ea090877a765083",
-  "apiKey": "AIzaSyDPdv7RiYFOIbsPYxrF2Kso2g2tmEq1-v4",
-  "authDomain": "golden-smile-m5xj8.firebaseapp.com",
-  "storageBucket": "golden-smile-m5xj8.firebasestorage.app",
-  "messagingSenderId": "869933746874",
-  "measurementId": ""
+  "projectId": "gen-lang-client-0844472130",
+  "appId": "1:248089717143:web:5a0bc5240d48986c9ebcd2",
+  "apiKey": "AIzaSyA7ural9VyDxCfHFhrfNIntjrc0GQbllvc",
+  "authDomain": "gen-lang-client-0844472130.firebaseapp.com",
+  "storageBucket": "gen-lang-client-0844472130.firebasestorage.app",
+  "messagingSenderId": "248089717143",
+  "measurementId": "",
+  "oAuthClientId": "248089717143-shbia4niroc9tpatnkltmof99ndgbe4n.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

@@ -92,38 +92,62 @@ export const Login = ({
           {/* Custom Error Warning if login fails */}
           {loginError && (
             <div 
-              className="p-4 rounded-2xl border flex flex-col gap-2.5 text-xs shadow-md bg-rose-50 border-rose-200 text-rose-900 duration-200 animate-fadeIn relative"
+              className={`p-4 rounded-2xl border flex flex-col gap-2.5 text-xs shadow-md duration-200 animate-fadeIn relative ${
+                loginError.code === "auth/popup-closed-by-user"
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-rose-50 border-rose-200 text-rose-900"
+              }`}
             >
               <button 
                 onClick={clearError}
-                className="absolute top-2.5 right-2.5 text-rose-400 hover:text-rose-700 font-bold text-sm w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 transition-colors"
+                className="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-700 font-bold text-sm w-5 h-5 flex items-center justify-center rounded-full hover:bg-black/5 transition-colors"
                 title="Sembunyikan pesan"
               >
                 ×
               </button>
               <div className="flex gap-2 items-start pr-4">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-500" />
+                <AlertCircle className={`w-5 h-5 shrink-0 mt-0.5 ${
+                  loginError.code === "auth/popup-closed-by-user" ? "text-amber-500" : "text-rose-500"
+                }`} />
                 <div className="space-y-1">
-                  <p className="font-bold text-[13px]">Gagal {authMode === "login" ? "Masuk" : "Daftar"} ({loginError.code || "Error"}):</p>
-                  <p className="leading-relaxed opacity-90 font-mono text-[10px]">
-                    {loginError.message}
+                  <p className="font-bold text-[13px]">
+                    {loginError.code === "auth/popup-closed-by-user"
+                      ? "Login Dibatalkan"
+                      : `Gagal ${authMode === "login" ? "Masuk" : "Daftar"}:`}
+                  </p>
+                  <p className="leading-relaxed opacity-95 text-[11px]">
+                    {loginError.code === "auth/popup-closed-by-user"
+                      ? "Jendela Google login ditutup sebelum otentikasi selesai. Silakan klik tombol 'Google Sign In' kembali di bawah untuk melanjutkan."
+                      : loginError.message === "POPUP_BLOCKED" || loginError.code === "auth/popup-blocked"
+                      ? "Browser Anda memblokir jendela popup login. Silakan aktifkan izin popup atau coba opsi di bawah."
+                      : loginError.message}
                   </p>
                 </div>
               </div>
               
-              {loginError.message === "POPUP_BLOCKED" && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 leading-relaxed font-medium">
-                  <p className="font-bold flex items-center gap-1 mb-1">
-                    <LogIn className="w-3.5 h-3.5" /> Popup Diblokir:
+              {(loginError.message === "POPUP_BLOCKED" || loginError.code === "auth/popup-blocked" || loginError.code === "auth/internal-error") && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 leading-relaxed font-medium space-y-2">
+                  <p className="font-bold flex items-center gap-1">
+                    <LogIn className="w-3.5 h-3.5" /> Opsi Masuk Alternatif:
                   </p>
-                  Browser Anda memblokir jendela popup. Silakan gunakan metode redirect untuk masuk dengan Google.
-                  <Button 
-                    variant="link" 
-                    onClick={onRedirectLogin}
-                    className="p-0 h-auto text-[11px] font-bold text-blue-600 underline ml-1"
-                  >
-                    Gunakan Mode Redirect
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      onClick={onRedirectLogin}
+                      className="h-8 text-[11px] font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-100"
+                    >
+                      Masuk via Redirect
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="outline" 
+                      onClick={() => window.open(window.location.href, '_blank')}
+                      className="h-8 text-[11px] font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-100"
+                    >
+                      Buka di Tab Baru
+                    </Button>
+                  </div>
                 </div>
               )}
               
